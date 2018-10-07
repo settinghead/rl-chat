@@ -3,35 +3,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
 from policy_net import Encoder, Decoder
+from environment import Environment
 
 tf.enable_eager_execution()
 
-
-class Environment:
-    def step(self, action):
-        pass
-
-
-class Agent():
-    def __init__(self):
-        self.encoder = Encoder()
-        self.decoder = Decoder()
-
-    def calc(self, state):
-        pass
-
-
-EPOCHS = 100
-INITIAL_STATE = []
+EPISODES = 100
 
 
 def main():
     env = Environment()
-    agent = Agent()
 
-    for epoch in range(EPOCHS):
+    for episode in range(EPISODES):
+
+        state = env.reset()
 
         for c in count():
-            state = INITIAL_STATE
             action = agent.calc(state)
             state, reward, done = env.step(action)
+
+            # To mark boundaries between episodes
+            if done:
+                reward = 0
