@@ -31,15 +31,22 @@ def calc_reward(utterance1: str, utterance2: str):
     ).ratio()
 
 
-N = 20
+MIN_UTTERANCE_LEN = 4
+MAX_UTTERANCE_LEN = 20
 
 import random
 import string
 
 
 def random_utterance():
-    return ''.join(random.choice(string.ascii_uppercase + string.digits)
-                   for _ in range(N))
+    utt_len = random.randint(MIN_UTTERANCE_LEN, MAX_UTTERANCE_LEN + 1)
+    random_chars = [random.choice(
+        string.ascii_uppercase +
+        string.digits +
+        string.ascii_lowercase + ' .,!?'
+    ) for _ in range(utt_len)]
+    result = ''.join(random_chars)
+    return result
 
 
 # some test code
