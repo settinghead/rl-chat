@@ -6,8 +6,11 @@ class Environment:
         self.reset()
 
     def step(self, action):
-        last_from_env = self.history[-1]
-        reward = calc_reward(action, last_from_env)
+        if len(self.history) == 0:
+            reward = 0
+        else:
+            last_from_env = self.history[-1]
+            reward = calc_reward(action, last_from_env)
 
         done = len(self.history) > CONVO_LEN
         self.history.append(action)
@@ -18,7 +21,7 @@ class Environment:
         return state, reward, done
 
     def reset(self):
-        self.history = ["hello"]
+        self.history = []
 
 
 from difflib import SequenceMatcher
@@ -54,5 +57,6 @@ if __name__ == "__main__":
     env = Environment()
     done = False
     while not done:
-        state, reward, done = env.step("hello")
-        print(state, reward)
+        action = "hello"
+        state, reward, done = env.step(action)
+        print(f"bot: {action} -> env: {state} reward: {reward}")
