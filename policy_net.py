@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import keras
 from keras.layers import (
-    LSTM, Dense
+    LSTM, Dense, Input
 )
 from keras import Model, Sequential
 
@@ -12,7 +12,7 @@ class Encoder(tf.keras.Model):
     def __init__(self):
         super(Encoder, self).__init__()
         self.encoder = Sequential([
-            LSTM(64, return_state=True, input_shape=(100)),
+            LSTM(64, return_state=True),
         ])
 
     def call(self, x, hidden):
