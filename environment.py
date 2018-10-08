@@ -13,7 +13,7 @@ class Environment:
         self.history.append(action)
 
         state = random_utterance()
-        self.history.append(action)
+        self.history.append(state)
 
         return state, reward, done
 
