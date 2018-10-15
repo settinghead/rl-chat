@@ -35,15 +35,18 @@ class Decoder(tf.keras.Model):
         x = self.decoder(x, initial_state=enc_state)
         # TODO: incomplete
 
-# encoder = Encoder()
-# decoder = Decoder()
-# encoder_hidden = initial_hidden
+# TODO: maybe a simple test case would help
 
-# for w_in in input_words:
-#    _, encoder_hidden = encoder(w_in, encoder_hidden)
+# if __name__ == "__main__":
+#     encoder = Encoder()
+#     decoder = Decoder()
+#     encoder_hidden = initial_hidden
 
-# decoder_hidden = encoder_hidden
-# w = input_words[-1]
-# while w != EOS:
-#    w, decoder_hidden = decoder(decoder_hidden, w)
-#    words_so_far.append(w)
+#     for w_in in input_words:
+#     _, encoder_hidden = encoder(w_in, encoder_hidden)
+
+#     decoder_hidden = encoder_hidden
+#     w = input_words[-1]
+#     while w != EOS:
+#     w, decoder_hidden = decoder(decoder_hidden, w)
+#     words_so_far.append(w)
