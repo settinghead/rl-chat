@@ -70,7 +70,8 @@ def main():
 
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
-            # TODO
+            # TODO: this reward accumulation comes from the cartpole example.
+            # may not be correct for our purpose. 
             running_add = 0
             for i in reversed(range(steps)):
                 if acc_rewards[i] == 0
