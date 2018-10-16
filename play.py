@@ -12,19 +12,8 @@ BATCH_SIZE = 20
 GAMMA = 0.9  # TODO
 
 
-class Agent:
-    def __init__(self):
-        pass
-
-    def encoder_z(self, state):
-        pass
-
-     def get_model_variables(self):
-         pass
-
 def main():
     env = Environment()
-    agent = Agent()
 
     for episode in range(EPISODES):
 
@@ -37,10 +26,9 @@ def main():
         input_words = []
         action = SAY_HI
 
-
         while True:
-            state, reward, done = env.step(action, state)
-            
+            state, reward, done = env.step(action)
+
             enc_hidden = INITIAL_ENC_HIDDEN
             for w in state:
                 _, enc_hidden = encoder(w, enc_hidden)
@@ -51,10 +39,10 @@ def main():
                 w_probs, dec_hidden = decoder(curr_w, dec_hidden)
                 # TODO: check if softmax is necessary
                 w_probs = softmax(w_probs)
-                dist = Categorical(w_probs)
+                dist = tf.distributions.Categorical(w_probs)
                 curr_w = dist.sample()
                 outputs.append(curr_w)
-            
+
             # action is a sentence (string)
             action = outputs.join('')
 
@@ -75,7 +63,7 @@ def main():
         if episode > 0 and episode % BATCH_SIZE == 0:
 
             # TODO: this reward accumulation comes from the cartpole example.
-            # may not be correct for our purpose. 
+            # may not be correct for our purpose.
             running_add = 0
             for i in reversed(range(steps)):
                 if acc_rewards[i] == 0
@@ -87,7 +75,8 @@ def main():
             # normalize reward
             reward_mean = np.mean(acc_rewards)
             reward_std = np.std(acc_rewards)
-            norm_rewards = [(r - reward_mean) / reward_std for r in acc_rewards]
+            norm_rewards = [(r - reward_mean) /
+                            reward_std for r in acc_rewards]
 
             optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
 
@@ -100,7 +89,7 @@ def main():
                     action = acc_actions[i]
 
                     enc_hidden = INITIAL_ENC_HIDDEN
-                    
+
                     for w in state:
                         _, enc_hidden = encoder(w, enc_hidden)
                     dec_hidden = enc_hidden
@@ -110,17 +99,17 @@ def main():
                         w_probs, dec_hidden = decoder(curr_w, dec_hidden)
                         # TODO: check if softmax is necessary
                         w_probs = softmax(w_probs)
-                        dist = Categorical(w_probs)
+                        dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
                         loss = - log(dist(curr_w)) * reward
-                
+
                 # calculate cumulative gradients
-                model_vars = agent.get_model_variables()
+                model_vars = [*encoder.variables, *decoder.variables]
                 grads = tape.gradient(loss, model_vars)
 
                 # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
-                
+
                 # finally, apply gradient
                 optimizer.apply_gradients(
                     zip(grads, model_vars),
@@ -130,4 +119,3 @@ def main():
             acc_actions = []
             acc_rewards = []
             acc_state = []
-
