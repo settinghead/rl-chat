@@ -44,14 +44,14 @@ def main():
                 _, enc_hidden = encoder(w, enc_hidden)
             dec_hidden = enc_hidden
             outputs = []
-            w = state[-1]
+            the_word = START
             while w != EOS:
                 # maybe apply softmax because w_prob may not be softmax-ed?
+                w_probs, dec_hidden = decoder(the_word, dec_hidden)
                 w_probs = softmax(w_probs)
                 dist = Categorical(w_probs)
                 the_word = dist.sample(w_probs)
-                w_probs, dec_hidden = decoder(the_word, dec_hidden)
-                outputs.append(w)
+                outputs.append(the_word)
             
             # action is a sentence
             action = outputs.join('')
@@ -92,13 +92,28 @@ def main():
 
             with tf.GradientTape() as tape:
                 for i in range(steps):
+                    # state is just the last sentence from user/environment
                     state = acc_states[i]
                     reward = acc_rewards[i]
                     action = acc_actions[i]
 
-                    probs = agent.encoder_z(state)
+                    enc_hidden = INITIAL_ENC_HIDDEN
+                    
+                    for w in state:
+                        _, enc_hidden = encoder(w, enc_hidden)
+                    dec_hidden = enc_hidden
+                    outputs = []
+                    the_word = START
+                    while w != EOS:
+                        # maybe apply softmax because w_prob may not be softmax-ed?
+                        w_probs, dec_hidden = decoder(the_word, dec_hidden)
+                        w_probs = softmax(w_probs)
+                        dist = Categorical(w_probs)
+                        the_word = dist.sample(w_probs)
+                        outputs.append(the_word)
+
                     dist = Categorical(probs)
-                    # TODO: may not be correct
+                    # TODO: check formulation
                     loss = - log(dist(action)) * reward
                 
                 model_vars = agent.get_model_variables()
