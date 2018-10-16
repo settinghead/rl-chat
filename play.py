@@ -28,6 +28,7 @@ def main():
 
     for episode in range(EPISODES):
 
+        # Start of Episode
         state = env.reset()
 
         acc_rewards = []
@@ -35,6 +36,7 @@ def main():
         acc_states = []
         input_words = []
         action = SAY_HI
+
 
         while True:
             state, reward, done = env.step(action, state)
@@ -44,28 +46,30 @@ def main():
                 _, enc_hidden = encoder(w, enc_hidden)
             dec_hidden = enc_hidden
             outputs = []
-            the_word = START
-            while w != EOS:
-                # maybe apply softmax because w_prob may not be softmax-ed?
-                w_probs, dec_hidden = decoder(the_word, dec_hidden)
+            curr_w = START
+            while curr_w != EOS:
+                w_probs, dec_hidden = decoder(curr_w, dec_hidden)
+                # TODO: check if softmax is necessary
                 w_probs = softmax(w_probs)
                 dist = Categorical(w_probs)
-                the_word = dist.sample(w_probs)
-                outputs.append(the_word)
+                curr_w = dist.sample(w_probs)
+                outputs.append(curr_w)
             
             # action is a sentence (string)
             action = outputs.join('')
 
-            # To mark boundaries between episodes
-            # TODO: this part is copied from the cart pole example.
+            # TODO: the following part is copied from the cart pole example.
             # check if still necessary.
+            # To mark boundaries between episodes
             if done:
                 reward = 0
                 input_words = []
 
+            # record history (to be used for gradient updating after the episode is done)
             acc_rewards.append(reward)
             acc_actions.append(action)
             acc_states.append(state)
+        # End of Episode
 
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
@@ -100,14 +104,14 @@ def main():
                         _, enc_hidden = encoder(w, enc_hidden)
                     dec_hidden = enc_hidden
                     outputs = []
-                    the_word = START
-                    while w != EOS:
-                        # maybe apply softmax because w_prob may not be softmax-ed?
-                        w_probs, dec_hidden = decoder(the_word, dec_hidden)
+                    curr_w = START
+                    while curr_w != EOS:
+                        w_probs, dec_hidden = decoder(curr_w, dec_hidden)
+                        # TODO: check if softmax is necessary
                         w_probs = softmax(w_probs)
                         dist = Categorical(w_probs)
-                        the_word = dist.sample(w_probs)
-                        outputs.append(the_word)
+                        curr_w = dist.sample(w_probs)
+                        outputs.append(curr_w)
 
                     dist = Categorical(probs)
                     # TODO: check formulation
@@ -125,6 +129,7 @@ def main():
                     zip(grads, model_vars),
                 )
 
+            # Reset everything for the next episode
             acc_actions = []
             acc_rewards = []
             acc_state = []
