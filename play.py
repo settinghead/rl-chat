@@ -106,14 +106,13 @@ def main():
                 # calculate cumulative gradients
                 model_vars = [*encoder.variables, *decoder.variables]
                 grads = tape.gradient(loss, model_vars)
-
                 # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
 
-                # finally, apply gradient
-                optimizer.apply_gradients(
-                    zip(grads, model_vars),
-                )
+            # finally, apply gradient
+            optimizer.apply_gradients(
+                zip(grads, model_vars),
+            )
 
             # Reset everything for the next episode
             acc_actions = []
