@@ -52,7 +52,7 @@ def main():
                 # TODO: check if softmax is necessary
                 w_probs = softmax(w_probs)
                 dist = Categorical(w_probs)
-                curr_w = dist.sample(w_probs)
+                curr_w = dist.sample()
                 outputs.append(curr_w)
             
             # action is a sentence (string)
@@ -73,6 +73,7 @@ def main():
 
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
+
             # TODO: this reward accumulation comes from the cartpole example.
             # may not be correct for our purpose. 
             running_add = 0
@@ -105,17 +106,13 @@ def main():
                     dec_hidden = enc_hidden
                     outputs = []
                     curr_w = START
-                    while curr_w != EOS:
+                    for curr_w in action:
                         w_probs, dec_hidden = decoder(curr_w, dec_hidden)
                         # TODO: check if softmax is necessary
                         w_probs = softmax(w_probs)
                         dist = Categorical(w_probs)
-                        curr_w = dist.sample(w_probs)
-                        outputs.append(curr_w)
-
-                    dist = Categorical(probs)
-                    # TODO: check formulation
-                    loss = - log(dist(action)) * reward
+                        # TODO: check formulation
+                        loss = - log(dist(curr_w)) * reward
                 
                 # calculate cumulative gradients
                 model_vars = agent.get_model_variables()
