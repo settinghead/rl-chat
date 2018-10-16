@@ -95,7 +95,7 @@ def main():
                 for i in range(steps):
                     # state is just the last sentence from user/environment
                     state = acc_states[i]
-                    reward = acc_rewards[i]
+                    reward = norm_rewards[i]
                     action = acc_actions[i]
 
                     enc_hidden = INITIAL_ENC_HIDDEN
@@ -119,7 +119,7 @@ def main():
                 
                 # calculate cumulative gradients
                 model_vars = agent.get_model_variables()
-                grads = tape.gradient(loss_value, model_vars)
+                grads = tape.gradient(loss, model_vars)
 
                 # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
