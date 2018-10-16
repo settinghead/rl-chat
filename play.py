@@ -53,13 +53,12 @@ def main():
                 the_word = dist.sample(w_probs)
                 outputs.append(the_word)
             
-            # action is a sentence
+            # action is a sentence (string)
             action = outputs.join('')
-            
-            # actions_dist = Categorical(probs) # TODO: check if use Categorical
-            # action = actions_dist.sample()
 
             # To mark boundaries between episodes
+            # TODO: this part is copied from the cart pole example.
+            # check if still necessary.
             if done:
                 reward = 0
                 input_words = []
@@ -81,16 +80,14 @@ def main():
                     acc_rewards[i] = running_add
 
             # normalize reward
-
             reward_mean = np.mean(acc_rewards)
             reward_std = np.std(acc_rewards)
             norm_rewards = [(r - reward_mean) / reward_std for r in acc_rewards]
 
-            # accumulate gradient
-
             optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
 
             with tf.GradientTape() as tape:
+                # accumulate gradient with GradientTape
                 for i in range(steps):
                     # state is just the last sentence from user/environment
                     state = acc_states[i]
@@ -116,9 +113,14 @@ def main():
                     # TODO: check formulation
                     loss = - log(dist(action)) * reward
                 
+                # calculate cumulative gradients
                 model_vars = agent.get_model_variables()
                 grads = tape.gradient(loss_value, model_vars)
+
+                # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
+                
+                # finally, apply gradient
                 optimizer.apply_gradients(
                     zip(grads, model_vars),
                 )
