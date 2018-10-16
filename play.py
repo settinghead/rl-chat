@@ -93,7 +93,6 @@ def main():
                     for w in state:
                         _, enc_hidden = encoder(w, enc_hidden)
                     dec_hidden = enc_hidden
-                    outputs = []
                     curr_w = START
                     for curr_w in action:
                         w_probs, dec_hidden = decoder(curr_w, dec_hidden)
