@@ -27,7 +27,7 @@ def main():
         action = SAY_HI
 
         while True:
-            state, reward, done = env.step(action)
+            state, reward, done = env.step(action, state)
 
             enc_hidden = INITIAL_ENC_HIDDEN
             for w in state:
@@ -35,7 +35,7 @@ def main():
             dec_hidden = enc_hidden
             outputs = []
             curr_w = START
-            while curr_w != EOS:
+            while curr_w != EOS:    #EOS depends on granularity of responses (i.e. token, utterance, ...). TODO: determine length of responses
                 w_probs, dec_hidden = decoder(curr_w, dec_hidden)
                 # TODO: check if softmax is necessary
                 w_probs = softmax(w_probs)
@@ -59,13 +59,16 @@ def main():
             acc_states.append(state)
         # End of Episode
 
+        # Store number of time steps (BATCH_SIZE*episode_length)
+        NUM_STEPS=length(acc_states)
+        
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
 
             # TODO: this reward accumulation comes from the cartpole example.
             # may not be correct for our purpose.
             running_add = 0
-            for i in reversed(range(steps)):
+            for i in reversed(range(NUM_STEPS)):
                 if acc_rewards[i] == 0
                     running_add = 0
                 else:
@@ -82,7 +85,7 @@ def main():
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for i in range(steps):
+                for i in range(NUM_STEPS):
                     # state is just the last sentence from user/environment
                     state = acc_states[i]
                     reward = norm_rewards[i]
@@ -100,7 +103,7 @@ def main():
                         w_probs = softmax(w_probs)
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
-                        loss = - log(dist(curr_w)) * reward
+                        loss = - log(dist(curr_w)) * reward #TODO: determine if should add discount factor here
 
                 # calculate cumulative gradients
                 model_vars = [*encoder.variables, *decoder.variables]
