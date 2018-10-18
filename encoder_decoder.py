@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def gru(units):
-  # If you have a GPU, we recommend using CuDNNGRU(provides a 3x speedup than GRU)
-  # the code automatically does that.
   if tf.test.is_gpu_available():
     return tf.keras.layers.CuDNNGRU(units, 
                                     return_sequences=True, 
@@ -51,5 +49,4 @@ class Decoder(tf.keras.Model):
         x = tf.reshape(x, [self.batch_sz, self.vocab_size])
         logits = tf.nn.softmax(x)
         return logits, state
-
 
