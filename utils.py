@@ -10,5 +10,6 @@ def random_utterance(min_len, max_len):
         string.ascii_lowercase + ' .,!?'
     ) for _ in range(utt_len)]
     result = ' '.join(random_chars)
-    result = '<start> ' + result
+    result = '<start> ' + result + ' <end>'
+    print(result)
     return result

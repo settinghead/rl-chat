@@ -92,7 +92,7 @@ if __name__ == "__main__":
         if (epoch + 1) % 2 == 0:
             checkpoint.save(file_prefix = checkpoint_prefix)
         
-        print('Time taken for 1 epoch {} sec\n'.format(time.time() - start))
+        print('Time taken for {} epoch {} sec\n'.format(epoch, time.time() - start))
 
 
             

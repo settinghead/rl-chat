@@ -70,7 +70,8 @@ class Seq2Seq(tf.keras.Model):
         embedding_dim,
         enc_units,
         batch_sz,
-        targ_lang
+        targ_lang,
+        display_result = False
     ):
 
         super(Seq2Seq, self).__init__()
@@ -80,6 +81,7 @@ class Seq2Seq(tf.keras.Model):
         self.batch_sz = batch_sz
         self.enc_units = enc_units
         self.targ_lang = targ_lang
+        self.display_result = display_result
         self.encoder = Encoder(vocab_inp_size, embedding_dim, enc_units, batch_sz)
         self.decoder = Decoder(vocab_tar_size, embedding_dim, enc_units, batch_sz)
         self.hidden = self.encoder.initialize_hidden_state()
@@ -95,11 +97,19 @@ class Seq2Seq(tf.keras.Model):
         dec_hidden = enc_hidden
         dec_input = tf.expand_dims([self.targ_lang.word2idx['<start>']] * self.batch_sz, 1)       
         # Teacher forcing - feeding the target as the next input
+        result = ''
         for t in range(1, targ.shape[1]):
             predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
             loss += self.loss_function(targ[:, t], predictions)
+            predicted_id = tf.argmax(predictions[0]).numpy()
             # using teacher forcing
             dec_input = tf.expand_dims(targ[:, t], 1)
+            if self.targ_lang.idx2word[predicted_id] == '<end>':
+                if self.display_result:
+                    print(result)
+                return loss
+            else:
+                result += self.targ_lang.idx2word[predicted_id] + ' '
 
         return loss
 
@@ -107,6 +117,7 @@ class Seq2Seq(tf.keras.Model):
 def evaluate(model: Seq2Seq, eval_dataset):
     """evaluate an epoch."""
     total_loss = 0
+    model.display_result = True
     for (batch, (inp, targ)) in enumerate(eval_dataset):
         loss = model(inp, targ)
         batch_loss = (loss / int(targ.shape[1]))
