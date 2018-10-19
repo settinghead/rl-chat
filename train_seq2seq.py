@@ -88,8 +88,8 @@ if __name__ == "__main__":
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
 
-        # saving (checkpoint) the model every 2 epochs
-        if (epoch + 1) % 2 == 0:
+        # saving (checkpoint) the model every 100 epochs
+        if (epoch + 1) % 100 == 0:
             checkpoint.save(file_prefix = checkpoint_prefix)
         
         print('Time taken for {} epoch {} sec\n'.format(epoch, time.time() - start))
