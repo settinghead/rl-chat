@@ -48,7 +48,7 @@ if __name__ == "__main__":
     vocab_tar_size = len(targ_lang.word2idx)
 
     optimizer = tf.train.AdamOptimizer()
-    EPOCHS = 1000
+    EPOCHS = 10000
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
