@@ -86,6 +86,7 @@ if __name__ == "__main__":
         model = encoder_decoder.Seq2Seq(vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, targ_lang)
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
+        model.summary()
 
         # saving (checkpoint) the model every 100 epochs
         if (epoch + 1) % 100 == 0:
