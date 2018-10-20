@@ -3,18 +3,37 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
+BEGIN_TAG = '<GO>'
+END_TAG = '<EOS>'
+
 def gru(units):
-        if tf.test.is_gpu_available():
-            return tf.keras.layers.CuDNNGRU(units, 
-                                            return_sequences=True, 
-                                            return_state=True, 
-                                            recurrent_initializer='glorot_uniform')
-        else:
-            return tf.keras.layers.GRU(units, 
-                                    return_sequences=True, 
-                                    return_state=True, 
-                                    recurrent_activation='sigmoid', 
-                                    recurrent_initializer='glorot_uniform')
+    if tf.test.is_gpu_available():
+        return tf.keras.layers.CuDNNGRU(units, 
+                                        return_sequences=True, 
+                                        return_state=True, 
+                                        recurrent_initializer='glorot_uniform')
+    else:
+        return tf.keras.layers.GRU(units, 
+                                   return_sequences=True, 
+                                   return_state=True, 
+                                   recurrent_activation='sigmoid', 
+                                   recurrent_initializer='glorot_uniform')
+
+def bilstm(units):
+    if tf.test.is_gpu_available():
+        return tf.keras.layers.Bidirectional(tf.keras.layers.CuDNNLSTM(units, 
+                                                                       return_sequences=True, 
+                                                                       return_state=True,
+                                                                       dropout=0.25,
+                                                                       recurrent_dropout=0.25))
+    else:
+        return tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units, 
+                                                                  return_sequences=True, 
+                                                                  return_state=True,
+                                                                  dropout=0.25,
+                                                                  recurrent_dropout=0.25, 
+                                                                  recurrent_activation='sigmoid'))
+       
 
 class Encoder(tf.keras.Model):
     def __init__(
@@ -22,17 +41,26 @@ class Encoder(tf.keras.Model):
         vocab_size,
         embedding_dim,
         enc_units,
-        batch_sz
+        batch_sz,
+        use_bilstm = False
     ):
         super(Encoder, self).__init__()
         self.batch_sz = batch_sz
         self.enc_units = enc_units
         self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        self.use_bilstm = use_bilstm
         self.gru = gru(self.enc_units)
+        self.bilstm = bilstm(self.enc_units)
         
     def call(self, x, hidden):
         x = self.embedding(x)
-        output, state = self.gru(x, initial_state = hidden)        
+        if self.use_bilstm:
+            output, forward_h, forward_c, backward_h, backward_c = self.bilstm(x, initial_state=hidden)
+            state_h = tf.keras.layers.Concatenate([forward_h, backward_h])
+            state_c = tf.keras.layers.Concatenate([forward_c, backward_c])
+            state = [state_h, state_c]
+        else:
+            output, state = self.gru(x, initial_state = hidden)        
         return output, state
     
     def initialize_hidden_state(self):
@@ -44,19 +72,28 @@ class Decoder(tf.keras.Model):
         vocab_size,
         embedding_dim,
         dec_units,
-        batch_sz
+        batch_sz,
+        use_bilstm = False
     ):
         super(Decoder, self).__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
         self.vocab_size = vocab_size
         self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
+        self.bilstm = bilstm(self.dec_units)
         self.fc = tf.keras.layers.Dense(vocab_size)
         
     def call(self, x, hidden):
         x = self.embedding(x)
-        output, state = self.gru(x, initial_state = hidden)
+        if self.use_bilstm:
+            output, forward_h, forward_c, backward_h, backward_c  = self.bilstm(x, initial_state=hidden)
+            state_h = tf.keras.layers.Concatenate([forward_h, backward_h])
+            state_c = tf.keras.layers.Concatenate([forward_c, backward_c])
+            state = [state_h, state_c]
+        else:
+            output, state = self.gru(x, initial_state = hidden)
         x = self.fc(output)
         x = tf.reshape(x, [self.batch_sz, self.vocab_size])
         logits = tf.nn.softmax(x)
@@ -95,22 +132,21 @@ class Seq2Seq(tf.keras.Model):
         loss = 0
         enc_output, enc_hidden = self.encoder(inp, self.hidden)
         dec_hidden = enc_hidden
-        dec_input = tf.expand_dims([self.targ_lang.word2idx['<start>']] * self.batch_sz, 1)       
-        # Teacher forcing - feeding the target as the next input
+        dec_input = tf.expand_dims([self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
         result = ''
+        # Teacher forcing - feeding the target as the next input
         for t in range(1, targ.shape[1]):
             predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
             loss += self.loss_function(targ[:, t], predictions)
             predicted_id = tf.argmax(predictions[0]).numpy()
             # using teacher forcing
             dec_input = tf.expand_dims(targ[:, t], 1)
-            if self.targ_lang.idx2word[predicted_id] == '<end>':
+            if self.targ_lang.idx2word[predicted_id] == END_TAG:
                 if self.display_result:
                     print(result)
                 return loss
             else:
-                result += self.targ_lang.idx2word[predicted_id] + ' '
-
+                result += ' ' + self.targ_lang.idx2word[predicted_id]
         return loss
 
 

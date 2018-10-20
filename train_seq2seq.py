@@ -4,6 +4,7 @@ import functools
 import encoder_decoder as encoder_decoder 
 import os
 import time
+import utils
 from sklearn.model_selection import train_test_split
 
 
@@ -34,29 +35,27 @@ def max_length(tensor):
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
-
-    from utils import random_utterance
-    samples = [random_utterance(4, 10) for _ in range(1000)]
+    questions, answers = utils.load_conv_text()
 
     BATCH_SIZE = 64
     embedding_dim = 256
     units = 1024
   
-    inp_lang = LanguageIndex(samples)
-    targ_lang = LanguageIndex(samples)
+    inp_lang = LanguageIndex(questions)
+    targ_lang = LanguageIndex(answers)
 
     vocab_inp_size = len(inp_lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
 
     optimizer = tf.train.AdamOptimizer()
-    EPOCHS = 10
+    EPOCHS = 1000
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
     checkpoint = tf.train.Checkpoint(optimizer=optimizer)
 
-    input_tensor = [[inp_lang.word2idx[s] for s in sp.split(' ')] for sp in samples]
-    target_tensor = [[targ_lang.word2idx[s] for s in sp.split(' ')] for sp in samples]
+    input_tensor = [[inp_lang.word2idx[s] for s in sp.split(' ')] for sp in questions]
+    target_tensor = [[targ_lang.word2idx[s] for s in sp.split(' ')] for sp in answers]
     # Calculate max_length of input and output tensor
     # Here, we'll set those to the longest sentence in the dataset
     max_length_inp, max_length_tar = max_length(input_tensor), max_length(target_tensor)
