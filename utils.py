@@ -15,7 +15,25 @@ def load_conv_text():
             questions.append(question)
             answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
     return questions, answers
-            
+
+
+def pairwise(it):
+    it = iter(it)
+    while True:
+        yield next(it), next(it)
+
+
+MAX_LEN = 130
+
+
+def load_opensubtitles_text():
+    with open('dataset/movie_lines_selected_10k.txt', 'rb') as f:
+        pairs = [
+            (str(q).strip()[:MAX_LEN],
+             f"{BEGIN_TAG} {str(a).strip()[:MAX_LEN]} {END_TAG}")
+            for q, a in pairwise(f)]
+        return tuple(zip(*pairs))
+
 
 def random_utterance(min_len, max_len):
     utt_len = random.randint(min_len, max_len + 1)
