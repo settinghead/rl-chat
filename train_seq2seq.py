@@ -51,10 +51,6 @@ if __name__ == "__main__":
     optimizer = tf.train.AdamOptimizer()
     EPOCHS = 10000
 
-    checkpoint_dir = './training_checkpoints'
-    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer)
-
     input_tensor = [[inp_lang.word2idx[s]
                      for s in sp.split(' ')] for sp in questions]
     target_tensor = [[targ_lang.word2idx[s]
@@ -68,7 +64,7 @@ if __name__ == "__main__":
     input_tensor = tf.keras.preprocessing.sequence.pad_sequences(input_tensor,
                                                                  maxlen=max_length_inp,
                                                                  padding='post')
-
+    
     target_tensor = tf.keras.preprocessing.sequence.pad_sequences(target_tensor,
                                                                   maxlen=max_length_tar,
                                                                   padding='post')
@@ -88,10 +84,13 @@ if __name__ == "__main__":
 
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
     model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, targ_lang,
-        display_result=True)
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, targ_lang)
     # model.summary()
 
+    checkpoint_dir = './training_checkpoints'
+    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+    checkpoint=tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
+    
     for epoch in range(EPOCHS):
         start = time.time()
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)

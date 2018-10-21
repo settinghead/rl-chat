@@ -2,10 +2,10 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+import utils
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
-
 
 def gru(units):
     if tf.test.is_gpu_available():
@@ -37,6 +37,21 @@ def bilstm(units):
                                                                   recurrent_activation='sigmoid'))
 
 
+def Embedding(
+    vocab_size,
+    embedding_dim,
+    use_pretrained_embedding=False,
+    vocab=None
+):
+    if use_pretrained_embedding:
+        embedding_matrix = utils.get_embeddings(vocab)
+        return tf.keras.layers.Embedding(input_dim=vocab_size,
+                                         output_dim=embedding_dim, 
+                                         weights=[embedding_matrix],
+                                         trainable=False)
+    else:
+        return tf.keras.layers.Embedding(vocab_size, embedding_dim)
+
 class Encoder(tf.keras.Model):
     def __init__(
         self,
@@ -44,12 +59,14 @@ class Encoder(tf.keras.Model):
         embedding_dim,
         enc_units,
         batch_sz,
+        use_pretrained_embedding=False,
+        vocab=None,
         use_bilstm=False
     ):
         super(Encoder, self).__init__()
         self.batch_sz = batch_sz
         self.enc_units = enc_units
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        self.embedding = Embedding(vocab_size, embedding_dim, use_pretrained_embedding, vocab)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.enc_units)
         if use_bilstm:
@@ -78,13 +95,15 @@ class Decoder(tf.keras.Model):
         embedding_dim,
         dec_units,
         batch_sz,
+        use_pretrained_embedding=False,
+        vocab=None,
         use_bilstm=False
     ):
         super(Decoder, self).__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
         self.vocab_size = vocab_size
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        self.embedding = Embedding(vocab_size, embedding_dim, use_pretrained_embedding)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
         if use_bilstm:
@@ -102,7 +121,7 @@ class Decoder(tf.keras.Model):
         else:
             output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
-        x = tf.reshape(x, [self.batch_sz, self.vocab_size])
+        x = tf.reshape(x, [x.shape[0], self.vocab_size])
         logits = tf.nn.softmax(x)
         return logits, state
 
@@ -116,6 +135,7 @@ class Seq2Seq(tf.keras.Model):
         enc_units,
         batch_sz,
         targ_lang,
+        use_pretrained_embedding=False,
         display_result=False
     ):
 
@@ -128,9 +148,9 @@ class Seq2Seq(tf.keras.Model):
         self.targ_lang = targ_lang
         self.display_result = display_result
         self.encoder = Encoder(
-            vocab_inp_size, embedding_dim, enc_units, batch_sz)
+            vocab_inp_size, embedding_dim, enc_units, batch_sz, use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
         self.decoder = Decoder(
-            vocab_tar_size, embedding_dim, enc_units, batch_sz)
+            vocab_tar_size, embedding_dim, enc_units, batch_sz, use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
         self.hidden = self.encoder.initialize_hidden_state()
 
     def loss_function(self, real, pred):
@@ -154,11 +174,11 @@ class Seq2Seq(tf.keras.Model):
             # using teacher forcing
             dec_input = tf.expand_dims(targ[:, t], 1)
             if self.targ_lang.idx2word[predicted_id] == END_TAG:
+                if self.display_result:
+                    print("result: ", result)
                 return loss
             else:
                 result += ' ' + self.targ_lang.idx2word[predicted_id]
-        if self.display_result:
-            print("result: ", result)
         return loss
 
 
