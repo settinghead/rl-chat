@@ -15,7 +15,10 @@ stanford = StanfordCoreNLP('http://localhost:9000')
 sentences = [
     'hello. is anyone there?',
     'i am a tree and you are a bird.',
-    "the world is spinning so fast i'm buying new nike shoes."
+    "the world is spinning so fast i'm buying new nike shoes.",
+    'i hate everyone.',
+    "i'm glad it works",
+    "This is fantastic! Excellent! It's awesome!"
 ]
 
 for sentence in sentences:
