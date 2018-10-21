@@ -38,7 +38,7 @@ if __name__ == "__main__":
     tf.enable_eager_execution()
     questions, answers = utils.load_conv_text()
 
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
     embedding_dim = 256
     units = 1024
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     input_tensor = tf.keras.preprocessing.sequence.pad_sequences(input_tensor,
                                                                  maxlen=max_length_inp,
                                                                  padding='post')
-    
+
     target_tensor = tf.keras.preprocessing.sequence.pad_sequences(target_tensor,
                                                                   maxlen=max_length_tar,
                                                                   padding='post')
@@ -89,8 +89,8 @@ if __name__ == "__main__":
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-    checkpoint=tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
-    
+    checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
+
     for epoch in range(EPOCHS):
         start = time.time()
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)
