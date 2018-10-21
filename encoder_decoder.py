@@ -134,6 +134,7 @@ class Seq2Seq(tf.keras.Model):
         embedding_dim,
         enc_units,
         batch_sz,
+        inp_lang,
         targ_lang,
         use_pretrained_embedding=False,
         display_result=False
@@ -145,12 +146,14 @@ class Seq2Seq(tf.keras.Model):
         self.embedding_dim = embedding_dim
         self.batch_sz = batch_sz
         self.enc_units = enc_units
+        self.inp_lang = inp_lang
         self.targ_lang = targ_lang
-        self.display_result = display_result
         self.encoder = Encoder(
-            vocab_inp_size, embedding_dim, enc_units, batch_sz, use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
+            vocab_inp_size, embedding_dim, enc_units, batch_sz,
+            use_pretrained_embedding=use_pretrained_embedding, vocab=inp_lang.vocab)
         self.decoder = Decoder(
-            vocab_tar_size, embedding_dim, enc_units, batch_sz, use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
+            vocab_tar_size, embedding_dim, enc_units, batch_sz,
+            use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
         self.hidden = self.encoder.initialize_hidden_state()
 
     def loss_function(self, real, pred):

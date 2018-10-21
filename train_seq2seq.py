@@ -7,33 +7,6 @@ import time
 import utils
 from sklearn.model_selection import train_test_split
 
-
-class LanguageIndex():
-    def __init__(self, samples):
-        self.samples = samples
-        self.word2idx = {}
-        self.idx2word = {}
-        self.vocab = set()
-        self.create_index()
-
-    def create_index(self):
-        for phrase in self.samples:
-            self.vocab.update(phrase.split(' '))
-
-        self.vocab = sorted(self.vocab)
-
-        self.word2idx['<pad>'] = 0
-        for index, word in enumerate(self.vocab):
-            self.word2idx[word] = index + 1
-
-        for word, index in self.word2idx.items():
-            self.idx2word[index] = word
-
-
-def max_length(tensor):
-    return max(len(t) for t in tensor)
-
-
 if __name__ == "__main__":
     tf.enable_eager_execution()
     questions, answers = utils.load_conv_text()
@@ -42,8 +15,8 @@ if __name__ == "__main__":
     embedding_dim = 256
     units = 1024
 
-    inp_lang = LanguageIndex(questions)
-    targ_lang = LanguageIndex(answers)
+    inp_lang = utils.LanguageIndex(questions)
+    targ_lang = utils.LanguageIndex(answers)
 
     vocab_inp_size = len(inp_lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
@@ -51,14 +24,12 @@ if __name__ == "__main__":
     optimizer = tf.train.AdamOptimizer()
     EPOCHS = 10000
 
-    input_tensor = [[inp_lang.word2idx[s]
-                     for s in sp.split(' ')] for sp in questions]
-    target_tensor = [[targ_lang.word2idx[s]
-                      for s in sp.split(' ')] for sp in answers]
+    input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(question)] for question in questions]
+    target_tensor = [[targ_lang.word2idx[token] for token in utils.tokenize_sentence(answer)] for answer in answers]
     # Calculate max_length of input and output tensor
     # Here, we'll set those to the longest sentence in the dataset
-    max_length_inp, max_length_tar = max_length(
-        input_tensor), max_length(target_tensor)
+    max_length_inp, max_length_tar = utils.max_length(
+        input_tensor), utils.max_length(target_tensor)
 
     # Padding the input and output tensor to the maximum length
     input_tensor = tf.keras.preprocessing.sequence.pad_sequences(input_tensor,
@@ -84,7 +55,8 @@ if __name__ == "__main__":
 
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
     model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, targ_lang)
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang,
+        use_pretrained_embedding=True)
     # model.summary()
 
     checkpoint_dir = './training_checkpoints'

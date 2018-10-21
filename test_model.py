@@ -6,31 +6,6 @@ import time
 import utils
 
 tf.enable_eager_execution()
-class LanguageIndex():
-    def __init__(self, samples):
-        self.samples = samples
-        self.word2idx = {}
-        self.idx2word = {}
-        self.vocab = set()
-        self.create_index()
-
-    def create_index(self):
-        for phrase in self.samples:
-            self.vocab.update(phrase.split(' '))
-
-        self.vocab = sorted(self.vocab)
-
-        self.word2idx['<pad>'] = 0
-        for index, word in enumerate(self.vocab):
-            self.word2idx[word] = index + 1
-
-        for word, index in self.word2idx.items():
-            self.idx2word[index] = word
-
-
-def max_length(tensor):
-    return max(len(t) for t in tensor)
-
 
 optimizer = tf.train.AdamOptimizer()
 EPOCHS = 10000
@@ -44,23 +19,21 @@ BATCH_SIZE = 64
 embedding_dim = 256
 units = 1024
 
-inp_lang = LanguageIndex(questions)
-targ_lang = LanguageIndex(answers)
+inp_lang = utils.LanguageIndex(questions)
+targ_lang = utils.LanguageIndex(answers)
 
-input_tensor = [[inp_lang.word2idx[s]
-                     for s in sp.split(' ')] for sp in questions]
-target_tensor = [[targ_lang.word2idx[s]
-                      for s in sp.split(' ')] for sp in answers]
+input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(question)] for question in questions]
+target_tensor = [[targ_lang.word2idx[token] for token in utils.tokenize_sentence(answer)] for answer in answers]
 
-max_length_inp, max_length_tar = max_length(
-        input_tensor), max_length(target_tensor)
+max_length_inp, max_length_tar = utils.max_length(
+        input_tensor), utils.max_length(target_tensor)
 
 checkpoint_dir = './training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
 vocab_inp_size = len(inp_lang.word2idx)
 vocab_tar_size = len(targ_lang.word2idx)
 model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, targ_lang)
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang)
 checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
 
 # restoring the latest checkpoint in checkpoint_dir

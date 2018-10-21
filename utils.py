@@ -1,13 +1,16 @@
 import random
 import string
-
+import tensorflow as tf
+import tensorflow_hub as hub
+import numpy as np
+import spacy
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
 def load_conv_text():
     questions = []
     answers = []
-    with open('conv1.txt') as f:
+    with open('conv.txt') as f:
         for line in f:
             question_answer_pair = line.split("||")
             question = question_answer_pair[0].strip()
@@ -15,35 +18,47 @@ def load_conv_text():
             questions.append(question)
             answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
     return questions, answers
-            
 
-def random_utterance(min_len, max_len):
-    utt_len = random.randint(min_len, max_len + 1)
-    random_chars = [random.choice(
-        string.ascii_uppercase +
-        string.digits +
-        string.ascii_lowercase + ' .,!?'
-    ) for _ in range(utt_len)]
-    result = ' '.join(random_chars)
-    result = BEGIN_TAG + ' ' + result + ' ' + END_TAG
-    print(result)
-    return result
 
-import spacy
-import numpy as np
+nlp = spacy.load('en')
 
-def get_embeddings(vocab):
-    nlp = spacy.load('en')
-    nlp.vocab.vectors.from_glove('/Users/renyuli/MLProject/rl-chat/glove.6B/')
-    ''' the function to retreive the embedding space from Spacy GloVe
-    Vocab is the vocab built from your text'''
-    nr_vector = len(vocab) + 1 # 1 is saved for padding!!
-    # preset the embedding matrix, 300 is the embedding vector length
-    vectors = np.zeros((nr_vector, 300), dtype='float32')
-    for i, lex in enumerate(vocab):
-        if lex in nlp.vocab:
-            print(nlp.vocab[lex].vector)
-            # the 1st word is saved for padding!!!!
-            vectors[i + 1] = nlp.vocab[lex].vector / nlp.vocab[lex].vector_norm
+class LanguageIndex():
+    def __init__(self, samples):
+        self.samples = samples
+        self.word2idx = {}
+        self.idx2word = {}
+        self.vocab = set()
+        self.create_index()
 
-    return vectors
+    def create_index(self):
+        for phrase in self.samples:
+            self.vocab.update(tokenize_sentence(phrase))
+
+        self.vocab = sorted(self.vocab)
+
+        self.word2idx['<pad>'] = 0
+        for index, word in enumerate(self.vocab):
+            self.word2idx[word] = index + 1
+
+        for word, index in self.word2idx.items():
+            self.idx2word[index] = word
+
+def max_length(tensor):
+    return max(len(t) for t in tensor)
+
+
+def tokenize_sentence(sentence):
+    return [token.text for token in nlp(sentence)]
+
+def get_embeddings(vocab, embedding_dim = 1024):
+    url = "https://tfhub.dev/google/elmo/2"
+    elmo = hub.Module(url)
+
+    def ELMoEmbedding(elmo, x):
+        return tf.reshape(elmo(x, signature="default", as_dict=True)["elmo"], [embedding_dim, ])
+    vectors = []
+    for lex in vocab:
+        vectors.append(ELMoEmbedding(elmo, [lex]))
+    return tf.stack(vectors)
+
+
