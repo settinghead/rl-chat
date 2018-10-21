@@ -154,11 +154,11 @@ class Seq2Seq(tf.keras.Model):
             # using teacher forcing
             dec_input = tf.expand_dims(targ[:, t], 1)
             if self.targ_lang.idx2word[predicted_id] == END_TAG:
-                if self.display_result:
-                    print(result)
                 return loss
             else:
                 result += ' ' + self.targ_lang.idx2word[predicted_id]
+        if self.display_result:
+            print("result: ", result)
         return loss
 
 
