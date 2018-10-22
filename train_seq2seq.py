@@ -10,10 +10,11 @@ from sklearn.model_selection import train_test_split
 if __name__ == "__main__":
     tf.enable_eager_execution()
     questions, answers = utils.load_conv_text()
+    # questions, answers = utils.load_opensubtitles_text()
 
-    BATCH_SIZE = 128
-    #256 if without pretrained embedding 
-    embedding_dim = 256  
+    BATCH_SIZE = 64
+    # 256 if without pretrained embedding
+    embedding_dim = 256
     units = 1024
 
     inp_lang = utils.LanguageIndex(questions)
@@ -25,8 +26,10 @@ if __name__ == "__main__":
     optimizer = tf.train.AdamOptimizer()
     EPOCHS = 10000
 
-    input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(question)] for question in questions]
-    target_tensor = [[targ_lang.word2idx[token] for token in utils.tokenize_sentence(answer)] for answer in answers]
+    input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(
+        question)] for question in questions]
+    target_tensor = [[targ_lang.word2idx[token]
+                      for token in utils.tokenize_sentence(answer)] for answer in answers]
     # Calculate max_length of input and output tensor
     # Here, we'll set those to the longest sentence in the dataset
     max_length_inp, max_length_tar = utils.max_length(
@@ -56,7 +59,7 @@ if __name__ == "__main__":
     use_GloVe = True
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
     if use_GloVe:
-        #1024 if using glove
+        # 1024 if using glove
         embedding_dim = 300
 
     model = encoder_decoder.Seq2Seq(

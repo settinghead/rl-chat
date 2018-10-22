@@ -3,10 +3,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import utils
-import tensorflow_hub as hub
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
+
 
 def gru(units):
     if tf.test.is_gpu_available():
@@ -38,25 +38,27 @@ def bilstm(units):
                                                                   recurrent_activation='sigmoid'))
 
 
-class GloVeEmbedding(tf.keras.Model):
-    def __init__(
-        self,
-        vocab,
-        embedding_dim=300):
-        super(GloVeEmbedding, self).__init__()
-        self.GloVe = utils.get_GloVe_embeddings(vocab, embedding_dim)
-        self.embedding_dim = embedding_dim
-    
-    def call(self, x):
-        batch_vectors = []
-        for i in range(x.shape[0]):
-            wid = x[i].numpy()
-            vectors = []
-            for idx in wid:
-                vectors.append(self.GloVe[idx])
-            batch_vectors.append(vectors)
-        tensor = tf.convert_to_tensor(batch_vectors, dtype=tf.float32)
-        return tensor
+# class GloVeEmbedding(tf.keras.Model):
+#     def __init__(
+#             self,
+#             vocab,
+#             embedding_dim=300):
+#         super(GloVeEmbedding, self).__init__()
+#         self.GloVe = utils.get_GloVe_embeddings(vocab, embedding_dim)
+#         self.embedding_dim = embedding_dim
+
+#     def call(self, x):
+#         batch_vectors = []
+
+#         for i in range(x.shape[0]):
+#             wid = x[i].numpy()
+#             vectors = []
+#             for idx in wid:
+#                 vectors.append(self.GloVe[idx])
+#             batch_vectors.append(vectors)
+#         tensor = tf.convert_to_tensor(batch_vectors, dtype=tf.float32)
+#         return tensor
+
 
 class Encoder(tf.keras.Model):
     def __init__(
@@ -72,9 +74,13 @@ class Encoder(tf.keras.Model):
         super(Encoder, self).__init__()
         self.batch_sz = batch_sz
         self.enc_units = enc_units
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
         if use_GloVe:
-            self.embedding = GloVeEmbedding(inp_lang, embedding_dim)
+            emb_matrix = utils.get_GloVe_embeddings(inp_lang, embedding_dim)
+            self.embedding = tf.keras.layers.Embedding(
+                vocab_size + 1, embedding_dim, weights=[emb_matrix])
+        else:
+            self.embedding = tf.keras.layers.Embedding(
+                vocab_size, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.enc_units)
         if use_bilstm:
@@ -111,9 +117,13 @@ class Decoder(tf.keras.Model):
         self.batch_sz = batch_sz
         self.dec_units = dec_units
         self.vocab_size = vocab_size
-        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
         if use_GloVe:
-            self.embedding = GloVeEmbedding(targ_lang, embedding_dim)
+            emb_matrix = utils.get_GloVe_embeddings(targ_lang, embedding_dim)
+            self.embedding = tf.keras.layers.Embedding(
+                vocab_size + 1, embedding_dim, weights=[emb_matrix])
+        else:
+            self.embedding = tf.keras.layers.Embedding(
+                vocab_size, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
         if use_bilstm:
@@ -157,8 +167,10 @@ class Seq2Seq(tf.keras.Model):
         self.batch_sz = batch_sz
         self.enc_units = enc_units
         self.targ_lang = targ_lang
-        self.encoder = Encoder(vocab_inp_size, embedding_dim, enc_units, batch_sz, use_GloVe, inp_lang.vocab)
-        self.decoder = Decoder(vocab_tar_size, embedding_dim, enc_units, batch_sz, use_GloVe, targ_lang.vocab)
+        self.encoder = Encoder(vocab_inp_size, embedding_dim,
+                               enc_units, batch_sz, use_GloVe, inp_lang.vocab)
+        self.decoder = Decoder(vocab_tar_size, embedding_dim,
+                               enc_units, batch_sz, use_GloVe, targ_lang.vocab)
         self.hidden = self.encoder.initialize_hidden_state()
         self.display_result = display_result
 
@@ -189,8 +201,7 @@ class Seq2Seq(tf.keras.Model):
             else:
                 result += ' ' + self.targ_lang.idx2word[predicted_id]
         return loss
-    
-    
+
     """
     def run_epsiode(self, init_state):
         #Encode FULL state using instance of encoder
@@ -216,8 +227,6 @@ class Seq2Seq(tf.keras.Model):
             
         return outputs[]
     """
-
-    
 
 
 def evaluate(model: Seq2Seq, eval_dataset):
