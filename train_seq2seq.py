@@ -13,8 +13,14 @@ if __name__ == "__main__":
     # questions, answers = utils.load_opensubtitles_text()
 
     BATCH_SIZE = 64
-    # 256 if without pretrained embedding
-    embedding_dim = 256
+    use_GloVe = True
+
+    if use_GloVe:
+        # 1024 if using glove
+        embedding_dim = 100
+    else:
+        # 256 if without pretrained embedding
+        embedding_dim = 256
     units = 1024
 
     inp_lang = utils.LanguageIndex(questions)
@@ -56,11 +62,7 @@ if __name__ == "__main__":
     val_dataset = tf.data.Dataset.from_tensor_slices(
         (input_tensor_val, target_tensor_val)).shuffle(EVAL_BUFFER_SIZE)
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
-    use_GloVe = True
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
-    if use_GloVe:
-        # 1024 if using glove
-        embedding_dim = 300
 
     model = encoder_decoder.Seq2Seq(
         vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang, use_GloVe)
