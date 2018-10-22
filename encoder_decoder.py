@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import utils
+import tensorflow_hub as hub
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
@@ -37,20 +38,25 @@ def bilstm(units):
                                                                   recurrent_activation='sigmoid'))
 
 
-def Embedding(
-    vocab_size,
-    embedding_dim,
-    use_pretrained_embedding=False,
-    vocab=None
-):
-    if use_pretrained_embedding:
-        embedding_matrix = utils.get_embeddings(vocab)
-        return tf.keras.layers.Embedding(input_dim=vocab_size,
-                                         output_dim=embedding_dim, 
-                                         weights=[embedding_matrix],
-                                         trainable=False)
-    else:
-        return tf.keras.layers.Embedding(vocab_size, embedding_dim)
+class GloVeEmbedding(tf.keras.Model):
+    def __init__(
+        self,
+        vocab,
+        embedding_dim=300):
+        super(GloVeEmbedding, self).__init__()
+        self.GloVe = utils.get_GloVe_embeddings(vocab, embedding_dim)
+        self.embedding_dim = embedding_dim
+    
+    def call(self, x):
+        batch_vectors = []
+        for i in range(x.shape[0]):
+            wid = x[i].numpy()
+            vectors = []
+            for idx in wid:
+                vectors.append(self.GloVe[idx])
+            batch_vectors.append(vectors)
+        tensor = tf.convert_to_tensor(batch_vectors, dtype=tf.float32)
+        return tensor
 
 class Encoder(tf.keras.Model):
     def __init__(
@@ -59,14 +65,16 @@ class Encoder(tf.keras.Model):
         embedding_dim,
         enc_units,
         batch_sz,
-        use_pretrained_embedding=False,
-        vocab=None,
+        use_GloVe=False,
+        inp_lang=None,
         use_bilstm=False
     ):
         super(Encoder, self).__init__()
         self.batch_sz = batch_sz
         self.enc_units = enc_units
-        self.embedding = Embedding(vocab_size, embedding_dim, use_pretrained_embedding, vocab)
+        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        if use_GloVe:
+            self.embedding = GloVeEmbedding(inp_lang, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.enc_units)
         if use_bilstm:
@@ -95,15 +103,17 @@ class Decoder(tf.keras.Model):
         embedding_dim,
         dec_units,
         batch_sz,
-        use_pretrained_embedding=False,
-        vocab=None,
+        use_GloVe=False,
+        targ_lang=None,
         use_bilstm=False
     ):
         super(Decoder, self).__init__()
         self.batch_sz = batch_sz
         self.dec_units = dec_units
         self.vocab_size = vocab_size
-        self.embedding = Embedding(vocab_size, embedding_dim, use_pretrained_embedding)
+        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        if use_GloVe:
+            self.embedding = GloVeEmbedding(targ_lang, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
         if use_bilstm:
@@ -136,7 +146,7 @@ class Seq2Seq(tf.keras.Model):
         batch_sz,
         inp_lang,
         targ_lang,
-        use_pretrained_embedding=False,
+        use_GloVe=False,
         display_result=False
     ):
 
@@ -146,15 +156,11 @@ class Seq2Seq(tf.keras.Model):
         self.embedding_dim = embedding_dim
         self.batch_sz = batch_sz
         self.enc_units = enc_units
-        self.inp_lang = inp_lang
         self.targ_lang = targ_lang
-        self.encoder = Encoder(
-            vocab_inp_size, embedding_dim, enc_units, batch_sz,
-            use_pretrained_embedding=use_pretrained_embedding, vocab=inp_lang.vocab)
-        self.decoder = Decoder(
-            vocab_tar_size, embedding_dim, enc_units, batch_sz,
-            use_pretrained_embedding=use_pretrained_embedding, vocab=targ_lang.vocab)
+        self.encoder = Encoder(vocab_inp_size, embedding_dim, enc_units, batch_sz, use_GloVe, inp_lang.vocab)
+        self.decoder = Decoder(vocab_tar_size, embedding_dim, enc_units, batch_sz, use_GloVe, targ_lang.vocab)
         self.hidden = self.encoder.initialize_hidden_state()
+        self.display_result = display_result
 
     def loss_function(self, real, pred):
         mask = 1 - np.equal(real, 0)

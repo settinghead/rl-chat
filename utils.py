@@ -3,14 +3,13 @@ import string
 import tensorflow as tf
 import tensorflow_hub as hub
 import numpy as np
-import spacy
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
 def load_conv_text():
     questions = []
     answers = []
-    with open('conv.txt') as f:
+    with open('conv1.txt') as f:
         for line in f:
             question_answer_pair = line.split("||")
             question = question_answer_pair[0].strip()
@@ -18,9 +17,6 @@ def load_conv_text():
             questions.append(question)
             answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
     return questions, answers
-
-
-nlp = spacy.load('en')
 
 class LanguageIndex():
     def __init__(self, samples):
@@ -48,17 +44,29 @@ def max_length(tensor):
 
 
 def tokenize_sentence(sentence):
-    return [token.text for token in nlp(sentence)]
+    sentence = sentence.replace('.', ' .')
+    sentence = sentence.replace(',', ' ,')
+    sentence = sentence.replace('?', ' ?')
+    sentence = sentence.replace('!', ' !')
+    return [t for t in sentence.split(' ')]
 
-def get_embeddings(vocab, embedding_dim = 1024):
+def get_ELMo_embeddings():
     url = "https://tfhub.dev/google/elmo/2"
     elmo = hub.Module(url)
+    return elmo
 
-    def ELMoEmbedding(elmo, x):
-        return tf.reshape(elmo(x, signature="default", as_dict=True)["elmo"], [embedding_dim, ])
-    vectors = []
-    for lex in vocab:
-        vectors.append(ELMoEmbedding(elmo, [lex]))
-    return tf.stack(vectors)
+def get_GloVe_embeddings(vocab, embedding_dim):
+    embeddings = dict()
+    f = open('glove.6B/glove.6B.'+str(embedding_dim)+'d.txt')
+    for line in f:
+        values = line.split()
+        word = values[0]
+        coefs = np.asarray(values[1:], dtype='float32')
+        embeddings[word] = coefs
 
+    embedding_matrix = np.zeros((len(vocab) + 1, embedding_dim))
+    for i, word in enumerate(vocab):
+        if word in embeddings.keys():
+            embedding_matrix[i+1] = embeddings[word]
+    return embedding_matrix
 
