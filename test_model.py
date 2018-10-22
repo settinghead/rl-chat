@@ -41,7 +41,7 @@ checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
 
 
 def generate_answer(sentence, model, inp_lang, targ_lang, max_length_inp, max_length_tar):
-    inputs = [inp_lang.word2idx[i] for i in sentence.split(' ')]
+    inputs = [inp_lang.word2idx[i] for i in utils.tokenize_sentence(sentence)]
     inputs = tf.keras.preprocessing.sequence.pad_sequences([inputs], maxlen=max_length_inp, padding='post')
     inputs = tf.convert_to_tensor(inputs)
     

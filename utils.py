@@ -6,6 +6,8 @@ import numpy as np
 
 BEGIN_TAG = '<GO>'
 END_TAG = '<EOS>'
+
+
 def load_conv_text():
     questions = []
     answers = []
@@ -17,6 +19,25 @@ def load_conv_text():
             questions.append(question)
             answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
     return questions, answers
+
+<<<<<<< HEAD
+=======
+
+def pairwise(it):
+    it = iter(it)
+    while True:
+        yield next(it), next(it)
+
+
+MAX_LEN = 130
+
+def load_opensubtitles_text():
+    with open('dataset/movie_lines_selected_10k.txt', 'rb') as f:
+        pairs = [
+            (str(q).strip()[:MAX_LEN],
+             f"{BEGIN_TAG} {str(a).strip()[:MAX_LEN]} {END_TAG}")
+            for q, a in pairwise(f)]
+        return tuple(zip(*pairs))
 
 class LanguageIndex():
     def __init__(self, samples):
@@ -38,6 +59,7 @@ class LanguageIndex():
 
         for word, index in self.word2idx.items():
             self.idx2word[index] = word
+
 
 def max_length(tensor):
     return max(len(t) for t in tensor)

@@ -189,6 +189,35 @@ class Seq2Seq(tf.keras.Model):
             else:
                 result += ' ' + self.targ_lang.idx2word[predicted_id]
         return loss
+    
+    
+    """
+    def run_epsiode(self, init_state):
+        #Encode FULL state using instance of encoder
+        #Then decode by manually looping
+        #Simultanously generating samples from policy (Monte-Carlo)
+        
+        loss = 0
+        enc_output, enc_hidden = self.encoder(init_state, self.hidden)
+        dec_hidden = enc_hidden
+        
+        outputs = []
+        curr_w = tf.expand_dims(
+            [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
+            
+        while curr_w != tf.expand_dims([self.targ_lang.word2idx[END_TAG]] * self.batch_sz, 1):  
+            #EOS depends on granularity of responses (i.e. token, utterance, ...), like START. TODO: determine length of responses (episodes)
+            
+            w_probs, dec_hidden = decoder(curr_w, dec_hidden)
+            w_probs = softmax(w_probs) # TODO: check if softmax is necessary
+            dist = tf.distributions.Categorical(w_probs)
+            curr_w = dist.sample()
+            outputs.append(curr_w)
+            
+        return outputs[]
+    """
+
+    
 
 
 def evaluate(model: Seq2Seq, eval_dataset):
