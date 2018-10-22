@@ -1,7 +1,7 @@
 import random
 import string
 import tensorflow as tf
-import tensorflow_hub as hub
+# import tensorflow_hub as hub
 import numpy as np
 
 BEGIN_TAG = '<GO>'
@@ -11,7 +11,7 @@ END_TAG = '<EOS>'
 def load_conv_text():
     questions = []
     answers = []
-    with open('conv1.txt') as f:
+    with open('conv.txt') as f:
         for line in f:
             question_answer_pair = line.split("||")
             question = question_answer_pair[0].strip()
@@ -73,15 +73,15 @@ def tokenize_sentence(sentence):
     return [t for t in sentence.split(' ')]
 
 
-def get_ELMo_embeddings():
-    url = "https://tfhub.dev/google/elmo/2"
-    elmo = hub.Module(url)
-    return elmo
+# def get_ELMo_embeddings():
+#     url = "https://tfhub.dev/google/elmo/2"
+#     elmo = hub.Module(url)
+#     return elmo
 
 
 def get_GloVe_embeddings(vocab, embedding_dim):
     embeddings = dict()
-    f = open('glove.6B/glove.6B.'+str(embedding_dim)+'d.txt')
+    f = open('pretrained_models/glove.6B.'+str(embedding_dim)+'d.txt')
     for line in f:
         values = line.split()
         word = values[0]
