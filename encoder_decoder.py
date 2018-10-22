@@ -38,26 +38,19 @@ def bilstm(units):
                                                                   recurrent_activation='sigmoid'))
 
 
-# class GloVeEmbedding(tf.keras.Model):
-#     def __init__(
-#             self,
-#             vocab,
-#             embedding_dim=300):
-#         super(GloVeEmbedding, self).__init__()
-#         self.GloVe = utils.get_GloVe_embeddings(vocab, embedding_dim)
-#         self.embedding_dim = embedding_dim
+class GloVeEmbedding(tf.keras.Model):
+    def __init__(
+            self,
+            vocab,
+            embedding_dim=300):
+        super(GloVeEmbedding, self).__init__()
+        self.GloVe = tf.Variable(
+            utils.get_GloVe_embeddings(vocab, embedding_dim), dtype='float32'
+        )
+        self.embedding_dim = embedding_dim
 
-#     def call(self, x):
-#         batch_vectors = []
-
-#         for i in range(x.shape[0]):
-#             wid = x[i].numpy()
-#             vectors = []
-#             for idx in wid:
-#                 vectors.append(self.GloVe[idx])
-#             batch_vectors.append(vectors)
-#         tensor = tf.convert_to_tensor(batch_vectors, dtype=tf.float32)
-#         return tensor
+    def call(self, x):
+        return tf.nn.embedding_lookup(self.GloVe, x)
 
 
 class Encoder(tf.keras.Model):
@@ -75,10 +68,7 @@ class Encoder(tf.keras.Model):
         self.batch_sz = batch_sz
         self.enc_units = enc_units
         if use_GloVe:
-            emb_matrix = utils.get_GloVe_embeddings(inp_lang, embedding_dim)
-            self.embedding = tf.keras.layers.Embedding(
-                vocab_size + 1, embedding_dim, weights=[emb_matrix],
-                trainable=True)
+            self.embedding = GloVeEmbedding(inp_lang, embedding_dim)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -119,10 +109,7 @@ class Decoder(tf.keras.Model):
         self.dec_units = dec_units
         self.vocab_size = vocab_size
         if use_GloVe:
-            emb_matrix = utils.get_GloVe_embeddings(targ_lang, embedding_dim)
-            self.embedding = tf.keras.layers.Embedding(
-                vocab_size + 1, embedding_dim, weights=[emb_matrix],
-                trainable=True)
+            self.embedding = GloVeEmbedding(targ_lang, embedding_dim)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)

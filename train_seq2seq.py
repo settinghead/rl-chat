@@ -14,6 +14,7 @@ if __name__ == "__main__":
     questions2, answers2 = utils.load_opensubtitles_text()
     questions = list(questions1) + list(questions2)
     answers = list(answers1) + list(answers2)
+    # questions, answers = utils.load_conv_text()
 
     BATCH_SIZE = 64
     use_GloVe = True
