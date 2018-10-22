@@ -71,7 +71,7 @@ class Encoder(tf.keras.Model):
         self.enc_units = enc_units
         if use_GloVe:
             self.embedding = GloVeEmbedding(
-                inp_lang, embedding_dim, trainable=False)
+                inp_lang, embedding_dim, trainable=True)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -113,7 +113,7 @@ class Decoder(tf.keras.Model):
         self.vocab_size = vocab_size
         if use_GloVe:
             self.embedding = GloVeEmbedding(
-                targ_lang, embedding_dim, trainable=False)
+                targ_lang, embedding_dim, trainable=True)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
