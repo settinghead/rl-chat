@@ -20,8 +20,6 @@ def load_conv_text():
             answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
     return questions, answers
 
-<<<<<<< HEAD
-=======
 
 def pairwise(it):
     it = iter(it)
@@ -31,6 +29,7 @@ def pairwise(it):
 
 MAX_LEN = 130
 
+
 def load_opensubtitles_text():
     with open('dataset/movie_lines_selected_10k.txt', 'rb') as f:
         pairs = [
@@ -38,6 +37,7 @@ def load_opensubtitles_text():
              f"{BEGIN_TAG} {str(a).strip()[:MAX_LEN]} {END_TAG}")
             for q, a in pairwise(f)]
         return tuple(zip(*pairs))
+
 
 class LanguageIndex():
     def __init__(self, samples):
@@ -72,10 +72,12 @@ def tokenize_sentence(sentence):
     sentence = sentence.replace('!', ' !')
     return [t for t in sentence.split(' ')]
 
+
 def get_ELMo_embeddings():
     url = "https://tfhub.dev/google/elmo/2"
     elmo = hub.Module(url)
     return elmo
+
 
 def get_GloVe_embeddings(vocab, embedding_dim):
     embeddings = dict()
@@ -91,4 +93,3 @@ def get_GloVe_embeddings(vocab, embedding_dim):
         if word in embeddings.keys():
             embedding_matrix[i+1] = embeddings[word]
     return embedding_matrix
-
