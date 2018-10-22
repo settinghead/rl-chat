@@ -9,22 +9,27 @@ from sklearn.model_selection import train_test_split
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
-    questions, answers = utils.load_conv_text()
-    # questions, answers = utils.load_opensubtitles_text()
+    # why not both?
+    questions1, answers1 = utils.load_conv_text()
+    questions2, answers2 = utils.load_opensubtitles_text()
+    questions = list(questions1) + list(questions2)
+    answers = list(answers1) + list(answers2)
 
     BATCH_SIZE = 64
     use_GloVe = True
 
     if use_GloVe:
         # 1024 if using glove
-        embedding_dim = 100
+        embedding_dim = 200
     else:
         # 256 if without pretrained embedding
         embedding_dim = 256
-    units = 1024
+    units = 512
 
     inp_lang = utils.LanguageIndex(questions)
     targ_lang = utils.LanguageIndex(answers)
+
+    print("Vocab size: ", len(inp_lang.vocab), len(targ_lang.vocab))
 
     vocab_inp_size = len(inp_lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
@@ -65,7 +70,9 @@ if __name__ == "__main__":
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
 
     model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang, use_GloVe)
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE,
+        inp_lang=inp_lang, targ_lang=targ_lang, use_GloVe=use_GloVe
+    )
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")

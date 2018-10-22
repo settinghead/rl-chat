@@ -78,7 +78,7 @@ class Encoder(tf.keras.Model):
             emb_matrix = utils.get_GloVe_embeddings(inp_lang, embedding_dim)
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size + 1, embedding_dim, weights=[emb_matrix],
-                trainable=False)
+                trainable=True)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -122,7 +122,7 @@ class Decoder(tf.keras.Model):
             emb_matrix = utils.get_GloVe_embeddings(targ_lang, embedding_dim)
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size + 1, embedding_dim, weights=[emb_matrix],
-                trainable=False)
+                trainable=True)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
