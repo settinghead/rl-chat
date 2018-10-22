@@ -42,10 +42,12 @@ class GloVeEmbedding(tf.keras.Model):
     def __init__(
             self,
             vocab,
-            embedding_dim=300):
+            embedding_dim=300,
+            trainable=True):
         super(GloVeEmbedding, self).__init__()
         self.GloVe = tf.Variable(
-            utils.get_GloVe_embeddings(vocab, embedding_dim), dtype='float32'
+            utils.get_GloVe_embeddings(vocab, embedding_dim), dtype='float32',
+            trainable=trainable
         )
         self.embedding_dim = embedding_dim
 
@@ -68,7 +70,8 @@ class Encoder(tf.keras.Model):
         self.batch_sz = batch_sz
         self.enc_units = enc_units
         if use_GloVe:
-            self.embedding = GloVeEmbedding(inp_lang, embedding_dim)
+            self.embedding = GloVeEmbedding(
+                inp_lang, embedding_dim, trainable=False)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -109,7 +112,8 @@ class Decoder(tf.keras.Model):
         self.dec_units = dec_units
         self.vocab_size = vocab_size
         if use_GloVe:
-            self.embedding = GloVeEmbedding(targ_lang, embedding_dim)
+            self.embedding = GloVeEmbedding(
+                targ_lang, embedding_dim, trainable=False)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
