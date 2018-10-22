@@ -14,6 +14,13 @@ GAMMA = 0.9  # TODO
 
 def main():
     env = Environment()
+    """
+    #Initialize here
+    
+    model = encoder_decoder.Seq2Seq(
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang,
+        use_pretrained_embedding=True)
+    """
 
     for episode in range(EPISODES):
 
@@ -29,20 +36,11 @@ def main():
         while True:
             state, reward, done = env.step(action, state)
 
-            enc_hidden = INITIAL_ENC_HIDDEN
-            for w in state:
-                _, enc_hidden = encoder(w, enc_hidden)
-            dec_hidden = enc_hidden
-            outputs = []
-            curr_w = START
-            while curr_w != EOS:    #EOS depends on granularity of responses (i.e. token, utterance, ...). TODO: determine length of responses
-                w_probs, dec_hidden = decoder(curr_w, dec_hidden)
-                # TODO: check if softmax is necessary
-                w_probs = softmax(w_probs)
-                dist = tf.distributions.Categorical(w_probs)
-                curr_w = dist.sample()
-                outputs.append(curr_w)
-
+            #Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
+            
+            #Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
+            outputs=model.run_epsiode(state)
+            
             # action is a sentence (string)
             action = outputs.join('')
 
