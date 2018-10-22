@@ -77,7 +77,8 @@ class Encoder(tf.keras.Model):
         if use_GloVe:
             emb_matrix = utils.get_GloVe_embeddings(inp_lang, embedding_dim)
             self.embedding = tf.keras.layers.Embedding(
-                vocab_size + 1, embedding_dim, weights=[emb_matrix])
+                vocab_size + 1, embedding_dim, weights=[emb_matrix],
+                trainable=False)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -89,14 +90,14 @@ class Encoder(tf.keras.Model):
     def call(self, x, hidden):
         x = self.embedding(x)
         if self.use_bilstm:
-            output, forward_h, forward_c, backward_h, backward_c = self.bilstm(
+            _, forward_h, forward_c, backward_h, backward_c = self.bilstm(
                 x, initial_state=hidden)
             state_h = tf.keras.layers.Concatenate([forward_h, backward_h])
             state_c = tf.keras.layers.Concatenate([forward_c, backward_c])
             state = [state_h, state_c]
         else:
-            output, state = self.gru(x, initial_state=hidden)
-        return output, state
+            _, state = self.gru(x, initial_state=hidden)
+        return state
 
     def initialize_hidden_state(self):
         return tf.zeros((self.batch_sz, self.enc_units))
@@ -120,7 +121,8 @@ class Decoder(tf.keras.Model):
         if use_GloVe:
             emb_matrix = utils.get_GloVe_embeddings(targ_lang, embedding_dim)
             self.embedding = tf.keras.layers.Embedding(
-                vocab_size + 1, embedding_dim, weights=[emb_matrix])
+                vocab_size + 1, embedding_dim, weights=[emb_matrix],
+                trainable=False)
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
@@ -182,7 +184,7 @@ class Seq2Seq(tf.keras.Model):
 
     def call(self, inp, targ):
         loss = 0
-        enc_output, enc_hidden = self.encoder(inp, self.hidden)
+        enc_hidden = self.encoder(inp, self.hidden)
         dec_hidden = enc_hidden
         dec_input = tf.expand_dims(
             [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
