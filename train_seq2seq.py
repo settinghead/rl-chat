@@ -5,16 +5,17 @@ import encoder_decoder as encoder_decoder
 import os
 import time
 import utils
+import data
 from sklearn.model_selection import train_test_split
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
     # why not both?
-    questions1, answers1 = utils.load_conv_text()
-    questions2, answers2 = utils.load_opensubtitles_text()
+    questions1, answers1 = data.load_conv_text()
+    questions2, answers2 = data.load_opensubtitles_text()
     questions = list(questions1) + list(questions2)
     answers = list(answers1) + list(answers2)
-    # questions, answers = utils.load_conv_text()
+    # questions, answers = data.load_conv_text()
 
     BATCH_SIZE = 64
     use_GloVe = True
