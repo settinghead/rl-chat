@@ -91,7 +91,7 @@ def main():
             print("Episode # ", episode)
             print("Samples from episode: ")
 
-            for s, a, r in random.sample(history, 5):
+            for s, a, r in random.sample([(s, a, r) for s, a, r in history if r > 0], 5):
                 print("prev_state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
