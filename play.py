@@ -49,13 +49,11 @@ def main():
         # Start of Episode
         env.reset()
 
-        action = SAY_HI
-        done = False
+        # get first state from the env
+        state, _, done = env.step(SAY_HI)
 
         while not done:
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
-            state, reward, done = env.step(action)
-            history.append((action, state, reward))
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
             init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
@@ -79,6 +77,10 @@ def main():
             # action is a sentence (string)
             action = ' '.join(outputs)
 
+            next_state, reward, done = env.step(action)
+            history.append((state, action, reward))
+            state = next_state
+
             # record history (to be used for gradient updating after the episode is done)
         # End of Episode
 
@@ -89,8 +91,8 @@ def main():
             print("Episode # ", episode)
             print("Samples from episode: ")
 
-            for a, s, r in random.sample(history, 5):
-                print("state: ", s)
+            for s, a, r in random.sample(history, 5):
+                print("prev_state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
 
@@ -119,7 +121,7 @@ def main():
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (action, state, _), norm_reward in zip(history, norm_rewards):
+                for (state, action, _), norm_reward in zip(history, norm_rewards):
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
