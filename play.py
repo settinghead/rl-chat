@@ -113,7 +113,7 @@ def main():
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (action, state, _), norm_reward in zip(history, norm_rewards):
+                for (action, state, _), norm_reward in zip(history, reversed(norm_rewards)):
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
