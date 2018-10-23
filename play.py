@@ -12,7 +12,7 @@ import random
 EPISODES = 1000
 BATCH_SIZE = 32
 MODEL_BATCH_SIZE = 1
-GAMMA = 1.0  # TODO
+GAMMA = 0.1  # TODO
 USE_GLOVE = True
 if USE_GLOVE:
     # 1024 if using glove
@@ -47,12 +47,15 @@ def main():
     for episode in range(EPISODES):
 
         # Start of Episode
-        state = env.reset()
+        env.reset()
 
-        state, _, done = env.step(SAY_HI)
+        action = SAY_HI
+        done = False
 
         while not done:
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
+            state, reward, done = env.step(action)
+            history.append((action, state, reward))
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
             init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
@@ -66,26 +69,26 @@ def main():
             curr_w_enc = tf.expand_dims(
                 [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
 
-            outputs = []
+            outputs = [w]
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
                 w_probs, dec_hidden = decoder(curr_w_enc, dec_hidden)
                 w_dist = tf.distributions.Categorical(w_probs)
                 w_idx = w_dist.sample(1).numpy()[0][0]
                 w = targ_lang.idx2word[w_idx]
                 outputs.append(w)
-
             # action is a sentence (string)
             action = ' '.join(outputs)
-            state, reward, done = env.step(action)
 
             # record history (to be used for gradient updating after the episode is done)
-            history.append((action, state, reward))
         # End of Episode
 
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
 
-            for a, s, r in random.sample(history, 10):
+            print("==========================")
+            print("Samples from episode: ")
+
+            for a, s, r in random.sample(history, 5):
                 print("state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
@@ -97,11 +100,12 @@ def main():
             acc_rewards = []
 
             for _, _, curr_reward in reversed(history):
-                # if curr_reward == 0:
-                #     running_add = 0
-                # else:
-                #     running_add = running_add * GAMMA + curr_reward
+                if curr_reward == 0:
+                    running_add = 0
+                else:
+                    running_add = running_add * GAMMA + curr_reward
                 acc_rewards.append(curr_reward)
+            acc_rewards = list(reversed(acc_rewards))
 
             # normalize reward
             reward_mean = np.mean(acc_rewards)
@@ -109,11 +113,12 @@ def main():
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
             print("all reward: ", acc_rewards)
+            print("total rewards: ", sum(acc_rewards))
             optimizer = tf.train.AdamOptimizer()
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (action, state, _), norm_reward in zip(history, reversed(norm_rewards)):
+                for (action, state, _), norm_reward in zip(history, norm_rewards):
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]

@@ -3,6 +3,7 @@ import string
 import data
 from corpus_utils import BEGIN_TAG, END_TAG
 from corpus_utils import tokenize_sentence, LanguageIndex
+from itertools import takewhile
 import random
 
 CONVO_LEN = 15
@@ -35,6 +36,7 @@ class Environment:
         state = random.sample(self._questions, 1)[0]
         state = tokenize_sentence(state)[:MAX_UTTERANCE_LEN]
         state = ' '.join(state)
+        state = f'{BEGIN_TAG} {state} {END_TAG}'
 
         self.history.append(state)
 
@@ -46,12 +48,12 @@ class Environment:
     def calc_reward(self, utterance1: str, utterance2: str):
         # calc string distance
         return SequenceMatcher(
-            None, [
+            None, list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
                 self.lang.word2idx[t] for t in
-                tokenize_sentence(utterance1)
-            ], [
+                tokenize_sentence(utterance1)[1:]
+            ])), list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
                 self.lang.word2idx[t] for t in
-                tokenize_sentence(utterance2)]
+                tokenize_sentence(utterance2)][1:]))
         ).ratio()
 
 
