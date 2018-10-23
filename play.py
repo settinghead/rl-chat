@@ -108,7 +108,7 @@ def main():
             reward_std = np.std(acc_rewards)
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
-            print("all reward: ", norm_rewards)
+            print("all reward: ", acc_rewards)
             optimizer = tf.train.AdamOptimizer()
 
             with tf.GradientTape() as tape:
