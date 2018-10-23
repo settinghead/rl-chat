@@ -114,7 +114,7 @@ def main():
                             reward_std for r in acc_rewards]
             print("all reward: ", acc_rewards)
             print("total rewards: ", sum(acc_rewards))
-            optimizer = tf.train.AdamOptimizer()
+            optimizer = tf.train.RMSPropOptimizer(learning_rate=0.01)
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
