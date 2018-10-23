@@ -9,7 +9,7 @@ import data
 import random
 
 
-EPISODES = 1000
+EPISODES = 10000000
 BATCH_SIZE = 32
 MODEL_BATCH_SIZE = 1
 GAMMA = 0.1  # TODO
@@ -86,6 +86,7 @@ def main():
         if episode > 0 and episode % BATCH_SIZE == 0:
 
             print("==========================")
+            print("Episode # ", episode)
             print("Samples from episode: ")
 
             for a, s, r in random.sample(history, 5):
