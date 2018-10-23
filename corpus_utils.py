@@ -30,4 +30,4 @@ def tokenize_sentence(sentence):
     sentence = sentence.replace(',', ' ,')
     sentence = sentence.replace('?', ' ?')
     sentence = sentence.replace('!', ' !')
-    return [t for t in sentence.split(' ')]
+    return [t for t in sentence.split(' ') if len(t) > 0]

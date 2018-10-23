@@ -5,6 +5,7 @@ from corpus_utils import BEGIN_TAG, END_TAG
 from corpus_utils import tokenize_sentence, LanguageIndex
 from itertools import takewhile
 import random
+from difflib import SequenceMatcher
 
 CONVO_LEN = 15
 MIN_UTTERANCE_LEN = 4
@@ -29,6 +30,8 @@ class Environment:
         else:
             last_from_env = self.history[-1]
             reward = self.calc_reward(action, last_from_env)
+            # if reward > 0:
+            #     print(last_from_env, "|", action)
 
         done = len(self.history) > CONVO_LEN
         self.history.append(action)
@@ -47,18 +50,17 @@ class Environment:
 
     def calc_reward(self, utterance1: str, utterance2: str):
         # calc string distance
-        return SequenceMatcher(
-            None, list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
-                self.lang.word2idx[t] for t in
-                tokenize_sentence(utterance1)[1:]
-            ])), list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
-                self.lang.word2idx[t] for t in
-                tokenize_sentence(utterance2)][1:]))
-        ).ratio()
-
-
-from difflib import SequenceMatcher
-
+        seq1 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
+            self.lang.word2idx[t] for t in
+            tokenize_sentence(utterance1)[1:]]))
+        seq2 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
+            self.lang.word2idx[t] for t in
+            tokenize_sentence(utterance2)][1:]))
+        r = SequenceMatcher(None, seq1, seq2).ratio()
+        # if(r > 0):
+        #     print([self.lang.idx2word[idx]
+        #            for idx in set(seq2).intersection(set(seq1))])
+        return r
 
 # def random_utterance(min_len, max_len):
 #     utt_len = random.randint(min_len, max_len + 1)
@@ -70,6 +72,7 @@ from difflib import SequenceMatcher
 #     result = ' '.join(random_chars)
 #     result = BEGIN_TAG + ' ' + result + ' ' + END_TAG
 #     return result
+
 
 
 # some test code
