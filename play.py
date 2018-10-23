@@ -85,7 +85,7 @@ def main():
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
 
-            for s, a, r in random.sample(history, 5):
+            for s, a, r in random.sample(history, 10):
                 print("state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
