@@ -6,57 +6,60 @@ from encoder_decoder import Encoder, Decoder, initialize_hidden_state
 from environment import Environment
 from corpus_utils import tokenize_sentence, LanguageIndex, BEGIN_TAG, END_TAG
 import data
-tf.enable_eager_execution()
+import random
+
 
 EPISODES = 1000
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 MODEL_BATCH_SIZE = 1
 GAMMA = 1.0  # TODO
 USE_GLOVE = True
 if USE_GLOVE:
     # 1024 if using glove
-    EMBEDDING_DIM = 200
+    EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 256
+    EMBEDDING_DIM = 128
 
-MAX_TARGET_LEN = 20
-ENC_UNITS = 512
-DEC_UNITS = 512
+MAX_TARGET_LEN = 30  # TODO: hack
+UNITS = 256
 
 
 def main():
+    tf.enable_eager_execution()
+
     env = Environment()
 
     SAY_HI = "hello"
 
-    _, answers = data.load_conv_text()
-    targ_lang = LanguageIndex(answers)
+    targ_lang = env.lang
 
     vocab_inp_size = len(env.lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
 
-    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, ENC_UNITS,
-                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=True, inp_lang=env.lang.vocab)
-    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, DEC_UNITS,
-                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=True, targ_lang=targ_lang.vocab)
+    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, inp_lang=env.lang.vocab)
+    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
+
+    history = []
 
     for episode in range(EPISODES):
 
         # Start of Episode
         state = env.reset()
 
-        history = []
         state, _, done = env.step(SAY_HI)
 
         while not done:
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
-            init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, ENC_UNITS)
+            init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
             state_inp = [env.lang.word2idx[token]
                          for token in tokenize_sentence(state)]
-            enc_hidden = encoder([state_inp], init_hidden)
+            enc_hidden = encoder(
+                tf.convert_to_tensor([state_inp]), init_hidden)
             dec_hidden = enc_hidden
 
             w = BEGIN_TAG
@@ -73,17 +76,19 @@ def main():
 
             # action is a sentence (string)
             action = ' '.join(outputs)
-
-            print("state: ", state)
-            print("action: ", action)
-
             state, reward, done = env.step(action)
+
             # record history (to be used for gradient updating after the episode is done)
             history.append((action, state, reward))
         # End of Episode
 
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
+
+            for s, a, r in random.sample(history, 5):
+                print("state: ", s)
+                print("action: ", a)
+                print("reward: ", r)
 
             # TODO: this reward accumulation comes from the cartpole example.
             # may not be correct for our purpose.
@@ -92,28 +97,29 @@ def main():
             acc_rewards = []
 
             for _, _, curr_reward in reversed(history):
-                if curr_reward == 0:
-                    running_add = 0
-                else:
-                    running_add = running_add * GAMMA + curr_reward
-                    acc_rewards.append(running_add)
+                # if curr_reward == 0:
+                #     running_add = 0
+                # else:
+                #     running_add = running_add * GAMMA + curr_reward
+                acc_rewards.append(curr_reward)
 
             # normalize reward
             reward_mean = np.mean(acc_rewards)
             reward_std = np.std(acc_rewards)
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
-
+            print("all reward: ", acc_rewards)
             optimizer = tf.train.AdamOptimizer()
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (action, state, _), norm_reward in zip(history, norm_rewards):
+                for (action, state, _), norm_reward in zip(history, acc_rewards):
                     init_hidden = initialize_hidden_state(
-                        MODEL_BATCH_SIZE, ENC_UNITS)
+                        MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
                                  for token in tokenize_sentence(state)]
-                    enc_hidden = encoder([state_inp], init_hidden)
+                    enc_hidden = encoder(
+                        tf.convert_to_tensor([state_inp]), init_hidden)
                     dec_hidden = enc_hidden
 
                     begin_w = tf.expand_dims(

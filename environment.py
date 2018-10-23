@@ -7,7 +7,7 @@ import random
 
 CONVO_LEN = 15
 MIN_UTTERANCE_LEN = 4
-MAX_UTTERANCE_LEN = 20
+MAX_UTTERANCE_LEN = 30
 
 
 class Environment:
@@ -19,19 +19,22 @@ class Environment:
     def __init__(self):
         self.reset()
         self._questions, _ = data.load_conv_text()
-        self._lang = LanguageIndex(self._questions)
+        self._lang = LanguageIndex(
+            self._questions + [f"{BEGIN_TAG} {END_TAG}"])
 
     def step(self, action):
         if len(self.history) == 0:
             reward = 0
         else:
             last_from_env = self.history[-1]
-            reward = calc_reward(action, last_from_env)
+            reward = self.calc_reward(action, last_from_env)
 
         done = len(self.history) > CONVO_LEN
         self.history.append(action)
 
         state = random.sample(self._questions, 1)[0]
+        state = tokenize_sentence(state)[:MAX_UTTERANCE_LEN]
+        state = ' '.join(state)
 
         self.history.append(state)
 
@@ -40,15 +43,19 @@ class Environment:
     def reset(self):
         self.history = []
 
+    def calc_reward(self, utterance1: str, utterance2: str):
+        # calc string distance
+        return SequenceMatcher(
+            None, [
+                self.lang.word2idx[t] for t in
+                tokenize_sentence(utterance1)
+            ], [
+                self.lang.word2idx[t] for t in
+                tokenize_sentence(utterance2)]
+        ).ratio()
+
 
 from difflib import SequenceMatcher
-
-
-def calc_reward(utterance1: str, utterance2: str):
-    # calc string distance
-    return SequenceMatcher(
-        None, utterance1, utterance2
-    ).ratio()
 
 
 # def random_utterance(min_len, max_len):
