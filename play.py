@@ -21,8 +21,8 @@ else:
     # 256 if without pretrained embedding
     EMBEDDING_DIM = 128
 
-MAX_TARGET_LEN = 30  # TODO: hack
-UNITS = 256
+MAX_TARGET_LEN = 20  # TODO: hack
+UNITS = 128
 
 
 def main():
@@ -85,7 +85,7 @@ def main():
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
 
-            for s, a, r in random.sample(history, 10):
+            for a, s, r in random.sample(history, 10):
                 print("state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
@@ -108,12 +108,12 @@ def main():
             reward_std = np.std(acc_rewards)
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
-            print("all reward: ", acc_rewards)
+            print("all reward: ", norm_rewards)
             optimizer = tf.train.AdamOptimizer()
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (action, state, _), norm_reward in zip(history, acc_rewards):
+                for (action, state, _), norm_reward in zip(history, norm_rewards):
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]

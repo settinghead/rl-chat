@@ -7,7 +7,7 @@ import random
 
 CONVO_LEN = 15
 MIN_UTTERANCE_LEN = 4
-MAX_UTTERANCE_LEN = 30
+MAX_UTTERANCE_LEN = 20
 
 
 class Environment:
