@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
 from encoder_decoder import Encoder, Decoder, initialize_hidden_state
-from environment import Environment
-from corpus_utils import tokenize_sentence, LanguageIndex, BEGIN_TAG, END_TAG
+from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG
 import data
 import random
 
@@ -13,13 +12,13 @@ EPISODES = 10000000
 BATCH_SIZE = 32
 MODEL_BATCH_SIZE = 1
 GAMMA = 0.1  # TODO
-USE_GLOVE = True
+USE_GLOVE = False
 if USE_GLOVE:
     # 1024 if using glove
     EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 128
+    EMBEDDING_DIM = 16
 
 MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
@@ -29,6 +28,7 @@ def main():
     tf.enable_eager_execution()
 
     env = Environment()
+    # print(env.lang.word2idx)
 
     SAY_HI = "hello"
 
@@ -58,7 +58,7 @@ def main():
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
             init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
             state_inp = [env.lang.word2idx[token]
-                         for token in tokenize_sentence(state)]
+                         for token in char_tokenizer(state)]
             enc_hidden = encoder(
                 tf.convert_to_tensor([state_inp]), init_hidden)
             dec_hidden = enc_hidden
@@ -75,7 +75,7 @@ def main():
                 w = targ_lang.idx2word[w_idx]
                 outputs.append(w)
             # action is a sentence (string)
-            action = ' '.join(outputs)
+            action = ''.join(outputs)
 
             next_state, reward, done = env.step(action)
             history.append((state, action, reward))
@@ -91,7 +91,8 @@ def main():
             print("Episode # ", episode)
             print("Samples from episode: ")
 
-            for s, a, r in random.sample([(s, a, r) for s, a, r in history if r > 0], 5):
+            good_rewards = [(s, a, r) for s, a, r in history if r > 0]
+            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 5)):
                 print("prev_state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
@@ -116,8 +117,9 @@ def main():
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
             print("all reward: ", acc_rewards)
-            print("total rewards: ", sum(acc_rewards))
-            optimizer = tf.train.AdamOptimizer()
+            print("avg (normalized) rewards: ", sum(
+                norm_rewards) / len(norm_rewards))
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
@@ -125,7 +127,7 @@ def main():
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
-                                 for token in tokenize_sentence(state)]
+                                 for token in char_tokenizer(state)]
                     enc_hidden = encoder(
                         tf.convert_to_tensor([state_inp]), init_hidden)
                     dec_hidden = enc_hidden
@@ -135,7 +137,7 @@ def main():
                     action_words_enc = [begin_w] + [
                         tf.expand_dims([targ_lang.word2idx[token]]
                                        * MODEL_BATCH_SIZE, 1)
-                        for token in tokenize_sentence(action)]
+                        for token in char_tokenizer(action)]
 
                     for curr_w_idx in action_words_enc:
                         w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)

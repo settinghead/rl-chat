@@ -1,7 +1,6 @@
 import random
 import string
 import data
-from corpus_utils import BEGIN_TAG, END_TAG
 from corpus_utils import tokenize_sentence, LanguageIndex
 from itertools import takewhile
 import random
@@ -10,6 +9,13 @@ from difflib import SequenceMatcher
 CONVO_LEN = 15
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
+BEGIN_TAG = "▶"
+END_TAG = "◀"
+EMPTY_TOKEN = "◌"
+
+
+def char_tokenizer(s: str):
+    return list(s)
 
 
 class Environment:
@@ -22,7 +28,10 @@ class Environment:
         self.reset()
         self._questions, _ = data.load_conv_text()
         self._lang = LanguageIndex(
-            self._questions + [f"{BEGIN_TAG} {END_TAG}"])
+            [f"{BEGIN_TAG}{END_TAG}"] + self._questions,
+            tokenizer=lambda s: list(s),
+            empty_token=EMPTY_TOKEN
+        )
 
     def step(self, action):
         if len(self.history) == 0:
@@ -37,9 +46,9 @@ class Environment:
         self.history.append(action)
 
         state = random.sample(self._questions, 1)[0]
-        state = tokenize_sentence(state)[:MAX_UTTERANCE_LEN]
-        state = ' '.join(state)
-        state = f'{BEGIN_TAG} {state} {END_TAG}'
+        state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
+        state = ''.join(state)
+        state = f'{state}'
 
         self.history.append(state)
 
@@ -52,10 +61,10 @@ class Environment:
         # calc string distance
         seq1 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
             self.lang.word2idx[t] for t in
-            tokenize_sentence(utterance1)[1:]]))
+            char_tokenizer(utterance1)[1:]]))
         seq2 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
             self.lang.word2idx[t] for t in
-            tokenize_sentence(utterance2)][1:]))
+            char_tokenizer(utterance2)][1:]))
         r = SequenceMatcher(None, seq1, seq2).ratio()
         # if(r > 0):
         #     print([self.lang.idx2word[idx]
