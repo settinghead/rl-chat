@@ -2,76 +2,101 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-from encoder_decoder import Encoder, Decoder
+from encoder_decoder import Encoder, Decoder, initialize_hidden_state
 from environment import Environment
-
+from corpus_utils import tokenize_sentence, LanguageIndex, BEGIN_TAG, END_TAG
+import data
 tf.enable_eager_execution()
 
-EPISODES = 100
-BATCH_SIZE = 20
-GAMMA = 0.9  # TODO
+EPISODES = 1000
+BATCH_SIZE = 8
+MODEL_BATCH_SIZE = 1
+GAMMA = 1.0  # TODO
+USE_GLOVE = True
+if USE_GLOVE:
+    # 1024 if using glove
+    EMBEDDING_DIM = 200
+else:
+    # 256 if without pretrained embedding
+    EMBEDDING_DIM = 256
+
+MAX_TARGET_LEN = 20
+ENC_UNITS = 512
+DEC_UNITS = 512
 
 
 def main():
     env = Environment()
-    """
-    #Initialize here
-    
-    model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang,
-        use_pretrained_embedding=True)
-    """
+
+    SAY_HI = "hello"
+
+    _, answers = data.load_conv_text()
+    targ_lang = LanguageIndex(answers)
+
+    vocab_inp_size = len(env.lang.word2idx)
+    vocab_tar_size = len(targ_lang.word2idx)
+
+    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, ENC_UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=True, inp_lang=env.lang.vocab)
+    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, DEC_UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=True, targ_lang=targ_lang.vocab)
 
     for episode in range(EPISODES):
 
         # Start of Episode
         state = env.reset()
 
-        acc_rewards = []
-        acc_actions = []
-        acc_states = []
-        input_words = []
-        action = SAY_HI
+        history = []
+        state, _, done = env.step(SAY_HI)
 
-        while True:
-            state, reward, done = env.step(action, state)
+        while not done:
+            # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
 
-            #Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
-            
-            #Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
-            outputs=model.run_epsiode(state)
-            
+            # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
+            init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, ENC_UNITS)
+            state_inp = [env.lang.word2idx[token]
+                         for token in tokenize_sentence(state)]
+            enc_hidden = encoder([state_inp], init_hidden)
+            dec_hidden = enc_hidden
+
+            w = BEGIN_TAG
+            curr_w_enc = tf.expand_dims(
+                [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
+
+            outputs = []
+            while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
+                w_probs, dec_hidden = decoder(curr_w_enc, dec_hidden)
+                w_dist = tf.distributions.Categorical(w_probs)
+                w_idx = w_dist.sample(1).numpy()[0][0]
+                w = targ_lang.idx2word[w_idx]
+                outputs.append(w)
+
             # action is a sentence (string)
-            action = outputs.join('')
+            action = ' '.join(outputs)
 
-            # TODO: the following part is copied from the cart pole example.
-            # check if still necessary.
-            # To mark boundaries between episodes
-            if done:
-                reward = 0
-                input_words = []
+            print("state: ", state)
+            print("action: ", action)
 
+            state, reward, done = env.step(action)
             # record history (to be used for gradient updating after the episode is done)
-            acc_rewards.append(reward)
-            acc_actions.append(action)
-            acc_states.append(state)
+            history.append((action, state, reward))
         # End of Episode
 
-        # Store number of time steps (BATCH_SIZE*episode_length)
-        NUM_STEPS=length(acc_states)
-        
         # Update policy
         if episode > 0 and episode % BATCH_SIZE == 0:
 
             # TODO: this reward accumulation comes from the cartpole example.
             # may not be correct for our purpose.
             running_add = 0
-            for i in reversed(range(NUM_STEPS)):
-                if acc_rewards[i] == 0
+
+            acc_rewards = []
+
+            for _, _, curr_reward in reversed(history):
+                if curr_reward == 0:
                     running_add = 0
                 else:
-                    running_add = running add * GAMMA + acc_rewards[i]
-                    acc_rewards[i] = running_add
+                    running_add = running_add * GAMMA + curr_reward
+                    acc_rewards.append(running_add)
 
             # normalize reward
             reward_mean = np.mean(acc_rewards)
@@ -79,32 +104,36 @@ def main():
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
 
-            optimizer = tf.train.RMSPropOptimizer(learning_rate=0.001)
+            optimizer = tf.train.AdamOptimizer()
 
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for i in range(NUM_STEPS):
-                    # state is just the last sentence from user/environment
-                    state = acc_states[i]
-                    reward = norm_rewards[i]
-                    action = acc_actions[i]
-
-                    enc_hidden = INITIAL_ENC_HIDDEN
-
-                    for w in state:
-                        _, enc_hidden = encoder(w, enc_hidden)
+                for (action, state, _), norm_reward in zip(history, norm_rewards):
+                    init_hidden = initialize_hidden_state(
+                        MODEL_BATCH_SIZE, ENC_UNITS)
+                    state_inp = [env.lang.word2idx[token]
+                                 for token in tokenize_sentence(state)]
+                    enc_hidden = encoder([state_inp], init_hidden)
                     dec_hidden = enc_hidden
-                    curr_w = START
-                    for curr_w in action:
-                        w_probs, dec_hidden = decoder(curr_w, dec_hidden)
+
+                    begin_w = tf.expand_dims(
+                        [targ_lang.word2idx[BEGIN_TAG]] * MODEL_BATCH_SIZE, 1)
+                    action_words_enc = [begin_w] + [
+                        tf.expand_dims([targ_lang.word2idx[token]]
+                                       * MODEL_BATCH_SIZE, 1)
+                        for token in tokenize_sentence(action)]
+
+                    for curr_w_idx in action_words_enc:
+                        w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)
                         # TODO: check if softmax is necessary
-                        w_probs = softmax(w_probs)
+                        w_probs = tf.nn.softmax(w_probs)
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
-                        loss = - log(dist(curr_w)) * reward #TODO: determine if should add discount factor here
+                        # TODO: determine if should add discount factor here
+                        loss = - dist._log_prob(curr_w_idx) * norm_reward
 
                 # calculate cumulative gradients
-                model_vars = [*encoder.variables, *decoder.variables]
+                model_vars = encoder.variables + decoder.variables
                 grads = tape.gradient(loss, model_vars)
                 # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
@@ -115,6 +144,7 @@ def main():
             )
 
             # Reset everything for the next episode
-            acc_actions = []
-            acc_rewards = []
-            acc_state = []
+            history = []
+
+
+main()

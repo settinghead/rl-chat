@@ -3,12 +3,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import utils
-
-BEGIN_TAG = '<GO>'
-END_TAG = '<EOS>'
+from corpus_utils import BEGIN_TAG, END_TAG
 
 
 def gru(units):
+    if tf.test.is_gpu_available():
+        return tf.keras.layers.CuDNNGRU(units,
+                                        return_sequences=True,
+                                        return_state=True,
+                                        recurrent_initializer='glorot_uniform')
+    else:
+        return tf.keras.layers.GRU(units,
+                                   return_sequences=True,
+                                   return_state=True,
+                                   recurrent_activation='sigmoid',
+                                   recurrent_initializer='glorot_uniform')
+
+
+def rnn_cell(units):
     if tf.test.is_gpu_available():
         return tf.keras.layers.CuDNNGRU(units,
                                         return_sequences=True,
@@ -92,8 +104,9 @@ class Encoder(tf.keras.Model):
             _, state = self.gru(x, initial_state=hidden)
         return state
 
-    def initialize_hidden_state(self):
-        return tf.zeros((self.batch_sz, self.enc_units))
+
+def initialize_hidden_state(batch_sz, num_enc_units):
+    return tf.zeros((batch_sz, num_enc_units))
 
 
 class Decoder(tf.keras.Model):
@@ -164,7 +177,7 @@ class Seq2Seq(tf.keras.Model):
                                enc_units, batch_sz, use_GloVe, inp_lang.vocab)
         self.decoder = Decoder(vocab_tar_size, embedding_dim,
                                enc_units, batch_sz, use_GloVe, targ_lang.vocab)
-        self.hidden = self.encoder.initialize_hidden_state()
+        self.hidden = initialize_hidden_state(batch_sz, enc_units)
         self.display_result = display_result
 
     def loss_function(self, real, pred):

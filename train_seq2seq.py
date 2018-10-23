@@ -5,11 +5,15 @@ import encoder_decoder as encoder_decoder
 import os
 import time
 import utils
+from corpus_utils import LanguageIndex, tokenize_sentence
 import data
 from sklearn.model_selection import train_test_split
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
+
+    use_GloVe = True
+
     # why not both?
     questions1, answers1 = data.load_conv_text()
     questions2, answers2 = data.load_opensubtitles_text()
@@ -17,8 +21,10 @@ if __name__ == "__main__":
     answers = list(answers1) + list(answers2)
     # questions, answers = data.load_conv_text()
 
+    inp_lang = LanguageIndex(questions)
+    targ_lang = LanguageIndex(answers)
+
     BATCH_SIZE = 64
-    use_GloVe = True
 
     if use_GloVe:
         # 1024 if using glove
@@ -28,9 +34,6 @@ if __name__ == "__main__":
         embedding_dim = 256
     units = 512
 
-    inp_lang = utils.LanguageIndex(questions)
-    targ_lang = utils.LanguageIndex(answers)
-
     print("Vocab size: ", len(inp_lang.vocab), len(targ_lang.vocab))
 
     vocab_inp_size = len(inp_lang.word2idx)
@@ -39,10 +42,10 @@ if __name__ == "__main__":
     optimizer = tf.train.AdamOptimizer()
     EPOCHS = 10000
 
-    input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(
+    input_tensor = [[inp_lang.word2idx[token] for token in tokenize_sentence(
         question)] for question in questions]
     target_tensor = [[targ_lang.word2idx[token]
-                      for token in utils.tokenize_sentence(answer)] for answer in answers]
+                      for token in tokenize_sentence(answer)] for answer in answers]
     # Calculate max_length of input and output tensor
     # Here, we'll set those to the longest sentence in the dataset
     max_length_inp, max_length_tar = utils.max_length(
