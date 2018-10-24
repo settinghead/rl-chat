@@ -7,9 +7,9 @@ from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG
 import data
 import random
 
-
+# https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 EPISODES = 10000000
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 MODEL_BATCH_SIZE = 1
 GAMMA = 0.1  # TODO
 USE_GLOVE = False
@@ -73,6 +73,8 @@ def main():
                 w_dist = tf.distributions.Categorical(w_probs)
                 w_idx = w_dist.sample(1).numpy()[0][0]
                 w = targ_lang.idx2word[w_idx]
+                curr_w_enc = tf.expand_dims(
+                    [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
                 outputs.append(w)
             # action is a sentence (string)
             action = ''.join(outputs)
@@ -117,8 +119,8 @@ def main():
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
             print("all reward: ", acc_rewards)
-            print("avg (normalized) rewards: ", sum(
-                norm_rewards) / len(norm_rewards))
+            print("avg rewards: ", sum(
+                acc_rewards) / len(acc_rewards))
             optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
 
             with tf.GradientTape() as tape:
@@ -146,7 +148,7 @@ def main():
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
                         # TODO: determine if should add discount factor here
-                        loss = - dist._log_prob(curr_w_idx) * norm_reward
+                        loss = - dist.log_prob(curr_w_idx) * norm_reward
 
                 # calculate cumulative gradients
                 model_vars = encoder.variables + decoder.variables
@@ -154,10 +156,10 @@ def main():
                 # this may be the place if we want to experiment with variable learning rates
                 # grads = grads * lr
 
-            # finally, apply gradient
-            optimizer.apply_gradients(
-                zip(grads, model_vars),
-            )
+                # finally, apply gradient
+                optimizer.apply_gradients(
+                    zip(grads, model_vars),
+                )
 
             # Reset everything for the next episode
             history = []
