@@ -151,7 +151,7 @@ def main():
                     for curr_w_idx in action_words_enc:
                         w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)
                         # TODO: check if softmax is necessary
-                        w_probs = tf.nn.softmax(w_probs)
+                        # w_probs = tf.nn.softmax(w_probs)
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
                         # TODO: determine if should add discount factor here
