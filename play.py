@@ -95,7 +95,7 @@ def main():
 
             print("==========================")
             print("Episode # ", episode)
-            print("Samples from episode: ")
+            print("Samples from episode with rewards > 0: ")
 
             good_rewards = [(s, a, r) for s, a, r in history if r > 0]
             for s, a, r in random.sample(good_rewards, min(len(good_rewards), 5)):
@@ -122,8 +122,11 @@ def main():
             reward_std = np.std(acc_rewards)
             norm_rewards = [(r - reward_mean) /
                             reward_std for r in acc_rewards]
-            print("all reward: ", acc_rewards)
-            print("avg rewards: ", sum(
+            print(
+                "all rewards: min=%f, max=%f, median=%f" %
+                (np.min(acc_rewards), np.max(acc_rewards), np.median(acc_rewards))
+            )
+            print("avg reward: ", sum(
                 acc_rewards) / len(acc_rewards))
             optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
             loss = 0
@@ -154,7 +157,6 @@ def main():
                         # w_probs = tf.nn.softmax(w_probs)
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
-                        # TODO: determine if should add discount factor here
                         loss += - dist.log_prob(curr_w_idx) * norm_reward
 
             # calculate cumulative gradients
