@@ -8,6 +8,8 @@ import data
 import random
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
+# https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
+
 EPISODES = 10000000
 BATCH_SIZE = 64
 MODEL_BATCH_SIZE = 1
@@ -53,6 +55,8 @@ def main():
         state, _, done = env.step(SAY_HI)
 
         while not done:
+            encoder.reset_states()
+            decoder.reset_states()
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
@@ -122,10 +126,13 @@ def main():
             print("avg rewards: ", sum(
                 acc_rewards) / len(acc_rewards))
             optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
-
+            loss = 0
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
                 for (state, action, _), norm_reward in zip(history, norm_rewards):
+                    encoder.reset_states()
+                    decoder.reset_states()
+
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
@@ -148,18 +155,18 @@ def main():
                         dist = tf.distributions.Categorical(w_probs)
                         # TODO: check formulation
                         # TODO: determine if should add discount factor here
-                        loss = - dist.log_prob(curr_w_idx) * norm_reward
+                        loss += - dist.log_prob(curr_w_idx) * norm_reward
 
-                # calculate cumulative gradients
-                model_vars = encoder.variables + decoder.variables
-                grads = tape.gradient(loss, model_vars)
-                # this may be the place if we want to experiment with variable learning rates
-                # grads = grads * lr
+            # calculate cumulative gradients
+            model_vars = encoder.variables + decoder.variables
+            grads = tape.gradient(loss, model_vars)
+            # this may be the place if we want to experiment with variable learning rates
+            # grads = grads * lr
 
-                # finally, apply gradient
-                optimizer.apply_gradients(
-                    zip(grads, model_vars),
-                )
+            # finally, apply gradient
+            optimizer.apply_gradients(
+                zip(grads, model_vars),
+            )
 
             # Reset everything for the next episode
             history = []

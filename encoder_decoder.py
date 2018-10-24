@@ -13,25 +13,11 @@ def gru(units):
                                         return_state=True,
                                         recurrent_initializer='glorot_uniform')
     else:
-        return tf.keras.layers.GRU(units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                   recurrent_activation='sigmoid',
-                                   recurrent_initializer='glorot_uniform')
-
-
-def rnn_cell(units):
-    if tf.test.is_gpu_available():
-        return tf.keras.layers.CuDNNGRU(units,
-                                        return_sequences=True,
-                                        return_state=True,
-                                        recurrent_initializer='glorot_uniform')
-    else:
-        return tf.keras.layers.GRU(units,
-                                   return_sequences=True,
-                                   return_state=True,
-                                   recurrent_activation='sigmoid',
-                                   recurrent_initializer='glorot_uniform')
+        return tf.keras.layers.LSTM(units,
+                                    return_sequences=True,
+                                    return_state=True,
+                                    recurrent_activation='sigmoid',
+                                    recurrent_initializer='glorot_uniform')
 
 
 def bilstm(units):

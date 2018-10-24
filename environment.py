@@ -48,7 +48,7 @@ class Environment:
         state = random.sample(self._questions, 1)[0]
         state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
         state = ''.join(state)
-        state = f'{state}'
+        state = f'{BEGIN_TAG}{state}{END_TAG}'
 
         self.history.append(state)
 
