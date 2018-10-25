@@ -1,47 +1,30 @@
 import tensorflow as tf
 import numpy as np
-import encoder_decoder as encoder_decoder
 import os
 import time
-import utils
+import data
+from corpus_utils import LanguageIndex, tokenize_sentence
+from utils import  max_length, load_trained_model
 
 tf.enable_eager_execution()
 
-optimizer = tf.train.AdamOptimizer()
-EPOCHS = 10000
 BATCH_SIZE = 64
 embedding_dim = 256
 units = 1024
 
-questions, answers = utils.load_conv_text()
+questions, answers = data.load_conv_text()
+inp_lang = LanguageIndex(questions)
+targ_lang = LanguageIndex(answers)
 
-BATCH_SIZE = 64
-embedding_dim = 256
-units = 1024
+input_tensor = [[inp_lang.word2idx[token] for token in tokenize_sentence(question)] for question in questions]
+target_tensor = [[targ_lang.word2idx[token] for token in tokenize_sentence(answer)] for answer in answers]
 
-inp_lang = utils.LanguageIndex(questions)
-targ_lang = utils.LanguageIndex(answers)
+max_length_inp, max_length_tar = max_length(input_tensor), max_length(target_tensor)
 
-input_tensor = [[inp_lang.word2idx[token] for token in utils.tokenize_sentence(question)] for question in questions]
-target_tensor = [[targ_lang.word2idx[token] for token in utils.tokenize_sentence(answer)] for answer in answers]
-
-max_length_inp, max_length_tar = utils.max_length(
-        input_tensor), utils.max_length(target_tensor)
-
-checkpoint_dir = './training_checkpoints'
-checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-vocab_inp_size = len(inp_lang.word2idx)
-vocab_tar_size = len(targ_lang.word2idx)
-model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE, inp_lang, targ_lang)
-checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
-
-# restoring the latest checkpoint in checkpoint_dir
-checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))
-
+model = load_trained_model(BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
 
 def generate_answer(sentence, model, inp_lang, targ_lang, max_length_inp, max_length_tar):
-    inputs = [inp_lang.word2idx[i] for i in utils.tokenize_sentence(sentence)]
+    inputs = [inp_lang.word2idx[i] for i in tokenize_sentence(sentence)]
     inputs = tf.keras.preprocessing.sequence.pad_sequences([inputs], maxlen=max_length_inp, padding='post')
     inputs = tf.convert_to_tensor(inputs)
     

@@ -16,7 +16,8 @@ if __name__ == "__main__":
 
     # why not both?
     questions1, answers1 = data.load_conv_text()
-    questions2, answers2 = data.load_opensubtitles_text()
+    #questions2, answers2 = data.load_opensubtitles_text()
+    questions2, answers2 = [], []
     questions = list(questions1) + list(questions2)
     answers = list(answers1) + list(answers2)
     # questions, answers = data.load_conv_text()
@@ -27,8 +28,8 @@ if __name__ == "__main__":
     BATCH_SIZE = 64
 
     if use_GloVe:
-        # 1024 if using glove
-        embedding_dim = 200
+        # 200 if using glove
+        embedding_dim = 50
     else:
         # 256 if without pretrained embedding
         embedding_dim = 256
@@ -89,7 +90,7 @@ if __name__ == "__main__":
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
 
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 100 == 0:
+        if (epoch + 1) % 2 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
         print('Time taken for {} epoch {} sec\n'.format(
