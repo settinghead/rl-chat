@@ -45,7 +45,7 @@ def main():
     dataset = tf.data.Dataset.from_tensor_slices((input_tensor, target_tensor)).shuffle(BUFFER_SIZE)
     dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
 
-    model: encoder_decoder.Seq2Seq = load_trained_model(BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
+    model:encoder_decoder.Seq2Seq = load_trained_model(BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
 
     sentimental_words = ['good', 'bad']
     targ_lang_embd = get_GloVe_embeddings(targ_lang.vocab, EMBEDDING_DIM)
@@ -69,10 +69,9 @@ def main():
         total_loss = 0
         for (batch, (inp, targ)) in enumerate(dataset):
             with tf.GradientTape() as tape:
+                
                 hidden = tf.zeros((BATCH_SIZE, UNITS))
                 enc_hidden = model.encoder(inp, hidden)
-
-                #history.append((action, state, reward))
                 dec_hidden = enc_hidden
                 dec_input = tf.expand_dims([targ_lang.word2idx[BEGIN_TAG]] * BATCH_SIZE, 1)
                 
@@ -111,7 +110,7 @@ def main():
                     #print(loss)
                     #print(probs)
                     #pg_loss_cross = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=onehot_labels, logits=targ[:, t]))
-                    pg_loss_cross = model.loss_function(targ[:, t], predictions)
+                    pg_loss_cross = model.loss_function(targ[:, t], onehot_labels)
                     pg_loss_cross = tf.reduce_mean(pg_loss_cross * rewards)
                     #print(pg_loss_cross)
                     #print("------")
