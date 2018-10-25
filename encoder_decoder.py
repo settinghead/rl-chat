@@ -13,11 +13,11 @@ def gru(units):
                                         return_state=True,
                                         recurrent_initializer='glorot_uniform')
     else:
-        return tf.keras.layers.LSTM(units,
-                                    return_sequences=True,
-                                    return_state=True,
-                                    recurrent_activation='sigmoid',
-                                    recurrent_initializer='glorot_uniform')
+        return tf.keras.layers.GRU(units,
+                                   return_sequences=True,
+                                   return_state=True,
+                                   recurrent_activation='sigmoid',
+                                   recurrent_initializer='glorot_uniform')
 
 
 def bilstm(units):
@@ -133,7 +133,7 @@ class Decoder(tf.keras.Model):
         else:
             output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
-        x = tf.reshape(x, [x.shape[0], self.vocab_size])
+        # x = tf.reshape(x, [x.shape[0], self.vocab_size])
         logits = tf.nn.softmax(x)
         return logits, state
 
