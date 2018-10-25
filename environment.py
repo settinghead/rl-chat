@@ -55,6 +55,7 @@ class Environment:
         return state, reward, done
 
     def reset(self):
+        # random.seed(48)
         self.history = []
 
     def calc_reward(self, utterance1: str, utterance2: str):
