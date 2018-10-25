@@ -133,7 +133,7 @@ class Decoder(tf.keras.Model):
         else:
             output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
-        # x = tf.reshape(x, [x.shape[0], self.vocab_size])
+        x = tf.reshape(x, [x.shape[0], self.vocab_size])
         logits = tf.nn.softmax(x)
         return logits, state
 
