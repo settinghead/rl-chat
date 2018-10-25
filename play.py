@@ -55,8 +55,6 @@ def main():
         state, _, done = env.step(SAY_HI)
 
         while not done:
-            encoder.reset_states()
-            decoder.reset_states()
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
@@ -74,8 +72,9 @@ def main():
             outputs = [w]
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
                 w_probs, dec_hidden = decoder(curr_w_enc, dec_hidden)
-                w_dist = tf.distributions.Categorical(w_probs)
-                w_idx = w_dist.sample(1).numpy()[0][0]
+                w_dist = tf.distributions.Categorical(w_probs[0])
+                w_idx = w_dist.sample(1).numpy()[0]
+                # w_idx = tf.argmax(w_probs[0]).numpy()
                 w = targ_lang.idx2word[w_idx]
                 curr_w_enc = tf.expand_dims(
                     [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
@@ -133,9 +132,6 @@ def main():
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
                 for (state, action, _), norm_reward in zip(history, norm_rewards):
-                    encoder.reset_states()
-                    decoder.reset_states()
-
                     init_hidden = initialize_hidden_state(
                         MODEL_BATCH_SIZE, UNITS)
                     state_inp = [env.lang.word2idx[token]
@@ -155,7 +151,7 @@ def main():
                         w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)
                         # TODO: check if softmax is necessary
                         # w_probs = tf.nn.softmax(w_probs)
-                        dist = tf.distributions.Categorical(w_probs)
+                        dist = tf.distributions.Categorical(w_probs[0])
                         # TODO: check formulation
                         loss += - dist.log_prob(curr_w_idx) * norm_reward
 
