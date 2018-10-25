@@ -14,7 +14,7 @@ import time
 EPISODES = 1000
 BATCH_SIZE = 64
 TOP_K = 4
-GAMMA = 10
+GAMMA = 1
 USE_GLOVE = True
 if USE_GLOVE:
     # 200 if using glove
