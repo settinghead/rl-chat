@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     if use_GloVe:
         # 200 if using glove
-        embedding_dim = 50
+        embedding_dim = 100
     else:
         # 256 if without pretrained embedding
         embedding_dim = 256
@@ -90,7 +90,7 @@ if __name__ == "__main__":
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
 
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 2 == 0:
+        if (epoch + 1) % 100 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
         print('Time taken for {} epoch {} sec\n'.format(
