@@ -1,8 +1,5 @@
 from collections import defaultdict
 
-BEGIN_TAG = '<GO>'
-END_TAG = '<EOS>'
-
 
 def tokenize_sentence(sentence):
     sentence = sentence.replace('.', ' .')
@@ -27,20 +24,46 @@ class LanguageIndex():
         self._unknown_token = unknown_token
         self.word2idx = defaultdict(lambda: UNKNOWN_IDX)
         self.idx2word = defaultdict(lambda: unknown_token)
-        self.vocab = set()
         self.create_index()
 
     def create_index(self):
-        self.vocab.update('<UNK>')
+        self.vocab = set()
         for phrase in self.samples:
             self.vocab.update(self._tokenizer(phrase))
 
-        self.vocab = sorted(self.vocab)
+        sorted_vocab = sorted(self.vocab)
 
         self.word2idx[self._empty_token] = EMPTY_IDX
         self.word2idx[self._unknown_token] = UNKNOWN_IDX
-        for index, word in enumerate(self.vocab):
+
+        for index, word in enumerate(sorted_vocab):
             self.word2idx[word] = index + len([EMPTY_IDX, UNKNOWN_IDX])
 
         for word, index in self.word2idx.items():
             self.idx2word[index] = word
+
+        self.vocab.update(self._empty_token)
+        self.vocab.update(self._unknown_token)
+
+# class LanguageIndex():
+#     def __init__(self, samples, tokenizer=tokenize_sentence, empty_token='<pad>'):
+#         self._tokenizer = tokenizer
+#         self.samples = samples
+#         self.word2idx = {}
+#         self.idx2word = {}
+#         self.vocab = set()
+#         self._empty_token = empty_token
+#         self.create_index()
+
+#     def create_index(self):
+#         for phrase in self.samples:
+#             self.vocab.update(self._tokenizer(phrase))
+
+#         self.vocab = sorted(self.vocab)
+
+#         self.word2idx[self._empty_token] = 0
+#         for index, word in enumerate(self.vocab):
+#             self.word2idx[word] = index + 1
+
+#         for word, index in self.word2idx.items():
+#             self.idx2word[index] = word
