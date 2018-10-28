@@ -75,6 +75,9 @@ if __name__ == "__main__":
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
 
+    # model: encoder_decoder.Seq2Seq = utils.load_trained_model(
+    #     BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
+
     model = encoder_decoder.Seq2Seq(
         vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE,
         inp_lang=inp_lang, targ_lang=targ_lang, use_GloVe=use_GloVe
@@ -90,7 +93,7 @@ if __name__ == "__main__":
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
 
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 100 == 0:
+        if (epoch + 1) % 200 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
         print('Time taken for {} epoch {} sec\n'.format(
