@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import utils
-from corpus_utils import BEGIN_TAG, END_TAG
+from embedding_utils import get_GloVe_embeddings
+from data import BEGIN_TAG, END_TAG
 
 
 def gru(units):
@@ -44,7 +45,7 @@ class GloVeEmbedding(tf.keras.Model):
             trainable=True):
         super(GloVeEmbedding, self).__init__()
         self.GloVe = tf.Variable(
-            utils.get_GloVe_embeddings(vocab, embedding_dim), dtype='float32',
+            get_GloVe_embeddings(vocab, embedding_dim), dtype='float32',
             trainable=trainable
         )
         self.embedding_dim = embedding_dim
@@ -186,19 +187,18 @@ class Seq2Seq(tf.keras.Model):
             predicted_id = tf.argmax(predictions[0]).numpy()
             # using teacher forcing
             dec_input = tf.expand_dims(targ[:, t], 1)
+            if self.display_result and self.targ_lang.idx2word[predicted_id] == END_TAG:
+                print("result: ", result)
             if self.targ_lang.idx2word[predicted_id] == END_TAG:
-                if self.display_result:
-                    print("result: ", result)
                 return loss
-            else:
-                result += ' ' + self.targ_lang.idx2word[predicted_id]
+            result += ' ' + self.targ_lang.idx2word[predicted_id]
         return loss
 
     """
     def run_epsiode(self, init_state):
-        #Encode FULL state using instance of encoder
-        #Then decode by manually looping
-        #Simultanously generating samples from policy (Monte-Carlo)
+        # Encode FULL state using instance of encoder
+        # Then decode by manually looping
+        # Simultanously generating samples from policy (Monte-Carlo)
         
         loss = 0
         enc_output, enc_hidden = self.encoder(init_state, self.hidden)
@@ -209,7 +209,7 @@ class Seq2Seq(tf.keras.Model):
             [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
             
         while curr_w != tf.expand_dims([self.targ_lang.word2idx[END_TAG]] * self.batch_sz, 1):  
-            #EOS depends on granularity of responses (i.e. token, utterance, ...), like START. TODO: determine length of responses (episodes)
+            # EOS depends on granularity of responses (i.e. token, utterance, ...), like START. TODO: determine length of responses (episodes)
             
             w_probs, dec_hidden = decoder(curr_w, dec_hidden)
             w_probs = softmax(w_probs) # TODO: check if softmax is necessary

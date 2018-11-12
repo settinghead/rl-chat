@@ -5,14 +5,15 @@ import encoder_decoder as encoder_decoder
 import os
 import time
 import utils
-from corpus_utils import LanguageIndex, tokenize_sentence
+from corpus_utils import LanguageIndex, tokenize_sentence, EMPTY_IDX
 import data
 from sklearn.model_selection import train_test_split
+from embedding_utils import get_embedding_dim
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
 
-    use_GloVe = True
+    USE_GLOVE = True
 
     # why not both?
     questions1, answers1 = data.load_conv_text()
@@ -25,14 +26,9 @@ if __name__ == "__main__":
     inp_lang = LanguageIndex(questions)
     targ_lang = LanguageIndex(answers)
 
-    BATCH_SIZE = 64
+    BATCH_SIZE = 512
 
-    if use_GloVe:
-        # 200 if using glove
-        embedding_dim = 100
-    else:
-        # 256 if without pretrained embedding
-        embedding_dim = 256
+    EMBEDDING_DIM = get_embedding_dim(USE_GLOVE)
     units = 512
 
     print("Vocab size: ", len(inp_lang.vocab), len(targ_lang.vocab))
@@ -55,11 +51,13 @@ if __name__ == "__main__":
     # Padding the input and output tensor to the maximum length
     input_tensor = tf.keras.preprocessing.sequence.pad_sequences(input_tensor,
                                                                  maxlen=max_length_inp,
-                                                                 padding='post')
+                                                                 padding='post',
+                                                                 value=EMPTY_IDX)
 
     target_tensor = tf.keras.preprocessing.sequence.pad_sequences(target_tensor,
                                                                   maxlen=max_length_tar,
-                                                                  padding='post')
+                                                                  padding='post',
+                                                                  value=EMPTY_IDX)
 
     # Creating training and validation sets using an 80-20 split
     input_tensor_train, input_tensor_val, target_tensor_train, target_tensor_val = train_test_split(
@@ -79,8 +77,10 @@ if __name__ == "__main__":
     #     BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
 
     model = encoder_decoder.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, BATCH_SIZE,
-        inp_lang=inp_lang, targ_lang=targ_lang, use_GloVe=use_GloVe
+        vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, units, BATCH_SIZE,
+        inp_lang=inp_lang, targ_lang=targ_lang,
+        use_GloVe=USE_GLOVE,
+        display_result=True
     )
 
     checkpoint_dir = './training_checkpoints'
@@ -96,5 +96,6 @@ if __name__ == "__main__":
         if (epoch + 1) % 200 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
-        print('Time taken for {} epoch {} sec\n'.format(
-            epoch, time.time() - start))
+        print('Time taken for epoch {}: {} sec\n'.format(
+            epoch, time.time() - start)
+        )

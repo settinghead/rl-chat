@@ -2,6 +2,7 @@ from collections import defaultdict
 
 
 def tokenize_sentence(sentence):
+    sentence = sentence.lower()
     sentence = sentence.replace('.', ' .')
     sentence = sentence.replace(',', ' ,')
     sentence = sentence.replace('?', ' ?')
@@ -17,13 +18,13 @@ class LanguageIndex():
     def __init__(self, samples,
                  tokenizer=tokenize_sentence,
                  empty_token='<pad>',
-                 unknown_token='<UNK>'):
+                 unknown_token='<unk>'):
         self._tokenizer = tokenizer
         self.samples = samples
         self._empty_token = empty_token
         self._unknown_token = unknown_token
         self.word2idx = defaultdict(lambda: UNKNOWN_IDX)
-        self.idx2word = defaultdict(lambda: unknown_token)
+        self.idx2word = {}
         self.create_index()
 
     def create_index(self):

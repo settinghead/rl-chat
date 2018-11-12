@@ -1,7 +1,7 @@
 
 
-BEGIN_TAG = '<GO>'
-END_TAG = '<EOS>'
+BEGIN_TAG = '<go>'
+END_TAG = '<eos>'
 
 
 def load_conv_text():

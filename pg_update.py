@@ -3,13 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
 import encoder_decoder
-from corpus_utils import tokenize_sentence, LanguageIndex, BEGIN_TAG, END_TAG
-from utils import load_trained_model, max_length, get_GloVe_embeddings
+from corpus_utils import tokenize_sentence, LanguageIndex
+from data import BEGIN_TAG, END_TAG
+from utils import load_trained_model, max_length
 import data
 import random
 from sklearn.metrics.pairwise import cosine_similarity
 import os
-from embedding_utils import get_embedding_dim
+from embedding_utils import get_embedding_dim, get_GloVe_embeddings
 import time
 
 EPISODES = 1000
