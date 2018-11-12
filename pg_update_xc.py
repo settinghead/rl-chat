@@ -2,15 +2,15 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-import encoder_decoder
+from encoder_decoder import Encoder, Decoder, initialize_hidden_state
 from corpus_utils import tokenize_sentence, LanguageIndex, BEGIN_TAG, END_TAG
-from utils import load_trained_model, max_length, get_GloVe_embeddings
+from utils import load_trained_model, max_length
 import data
 import random
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 import time
-from embedding_utils import get_embedding_dim
+from embedding_utils import get_GloVe_embeddings, get_embedding_dim
 
 EPISODES = 1000
 BATCH_SIZE = 64
@@ -19,6 +19,8 @@ GAMMA = 1
 
 USE_GLOVE = True
 EMBEDDING_DIM = get_embedding_dim(USE_GLOVE)
+BATCH_SIZE = 64
+MODEL_BATCH_SIZE = 1
 
 UNITS = 512
 
@@ -26,132 +28,145 @@ UNITS = 512
 def main():
     tf.enable_eager_execution()
 
-    questions1, answers1 = data.load_conv_text()
-    # questions2, answers2 = data.load_opensubtitles_text()
+    env = SentimentEnvironmentWordVec()
+    # print(env.lang.word2idx)
 
-    questions = list(questions1)
-    answers = list(answers1)
+    SAY_HI = "hello"
 
-    inp_lang, targ_lang = LanguageIndex(questions), LanguageIndex(answers)
+    targ_lang = env.lang
 
-    input_tensor = [[inp_lang.word2idx[token]
-                     for token in tokenize_sentence(question)] for question in questions]
-    target_tensor = [[targ_lang.word2idx[token]
-                      for token in tokenize_sentence(answer)] for answer in answers]
-    max_length_inp, max_length_tar = max_length(
-        input_tensor), max_length(target_tensor)
-    input_tensor = tf.keras.preprocessing.sequence.pad_sequences(input_tensor,
-                                                                 maxlen=max_length_inp,
-                                                                 padding='post')
-    target_tensor = tf.keras.preprocessing.sequence.pad_sequences(target_tensor,
-                                                                  maxlen=max_length_tar,
-                                                                  padding='post')
-    BUFFER_SIZE = len(input_tensor)
-    dataset = tf.data.Dataset.from_tensor_slices(
-        (input_tensor, target_tensor)).shuffle(BUFFER_SIZE)
-    dataset = dataset.batch(BATCH_SIZE, drop_remainder=True)
+    vocab_inp_size = len(env.lang.word2idx)
+    vocab_tar_size = len(targ_lang.word2idx)
 
-    model: encoder_decoder.Seq2Seq = load_trained_model(
-        BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
+    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, inp_lang=env.lang.vocab)
+    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
+                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
-    targ_lang_embd = get_GloVe_embeddings(targ_lang.vocab, EMBEDDING_DIM)
-
-    #max_prob_ids = np.argmax(sim_scores, axis=1)
-    # print(max_prob_ids)
-    # print(targ_lang.word2idx)
-    # print(targ_lang.idx2word(max_prob_ids[1]))
-
-    optimizer = tf.train.AdamOptimizer()
-
-    checkpoint_dir = './training_checkpoints'
-    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-    checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
+    history = []
 
     for episode in range(EPISODES):
 
         # Start of Episode
-        start = time.time()
-        total_loss = 0
-        for (batch, (inp, targ)) in enumerate(dataset):
+        env.reset()
+
+        # get first state from the env
+        state, _, done = env.step(SAY_HI)
+
+        while not done:
+            # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
+
+            # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
+            init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
+            state_inp = [env.lang.word2idx[token]
+                         for token in char_tokenizer(state)]
+            enc_hidden = encoder(
+                tf.convert_to_tensor([state_inp]), init_hidden)
+            dec_hidden = enc_hidden
+
+            w = BEGIN_TAG
+            curr_w_enc = tf.expand_dims(
+                [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
+
+            outputs = [w]
+            while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
+                w_probs, dec_hidden = decoder(curr_w_enc, dec_hidden)
+                w_dist = tf.distributions.Categorical(w_probs[0])
+                w_idx = w_dist.sample(1).numpy()[0]
+                # w_idx = tf.argmax(w_probs[0]).numpy()
+                w = targ_lang.idx2word[w_idx]
+                curr_w_enc = tf.expand_dims(
+                    [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
+                outputs.append(w)
+            # action is a sentence (string)
+            action = ''.join(outputs)
+
+            next_state, reward, done = env.step(action)
+            history.append((state, action, reward))
+            state = next_state
+
+            # record history (to be used for gradient updating after the episode is done)
+        # End of Episode
+
+        # Update policy
+        if episode > 0 and episode % BATCH_SIZE == 0:
+
+            print("==========================")
+            print("Episode # ", episode)
+            print("Samples from episode with rewards > 0: ")
+
+            good_rewards = [(s, a, r) for s, a, r in history if r > 0]
+            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 5)):
+                print("prev_state: ", s)
+                print("action: ", a)
+                print("reward: ", r)
+
+            # TODO: this reward accumulation comes from the cartpole example.
+            # may not be correct for our purpose.
+            running_add = 0
+
+            acc_rewards = []
+
+            for _, _, curr_reward in reversed(history):
+                if curr_reward == 0:
+                    running_add = 0
+                else:
+                    running_add = running_add * GAMMA + curr_reward
+                acc_rewards.append(curr_reward)
+            acc_rewards = list(reversed(acc_rewards))
+
+            # normalize reward
+            reward_mean = np.mean(acc_rewards)
+            reward_std = np.std(acc_rewards)
+            norm_rewards = [(r - reward_mean) /
+                            reward_std for r in acc_rewards]
+            print(
+                "all rewards: min=%f, max=%f, median=%f" %
+                (np.min(acc_rewards), np.max(acc_rewards), np.median(acc_rewards))
+            )
+            print("avg reward: ", sum(
+                acc_rewards) / len(acc_rewards))
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
+            loss = 0
             with tf.GradientTape() as tape:
+                # accumulate gradient with GradientTape
+                for (state, action, _), norm_reward in zip(history, norm_rewards):
+                    init_hidden = initialize_hidden_state(
+                        MODEL_BATCH_SIZE, UNITS)
+                    state_inp = [env.lang.word2idx[token]
+                                 for token in char_tokenizer(state)]
+                    enc_hidden = encoder(
+                        tf.convert_to_tensor([state_inp]), init_hidden)
+                    dec_hidden = enc_hidden
 
-                hidden = tf.zeros((BATCH_SIZE, UNITS))
-                enc_hidden = model.encoder(inp, hidden)
-                dec_hidden = enc_hidden
-                dec_input = tf.expand_dims(
-                    [targ_lang.word2idx[BEGIN_TAG]] * BATCH_SIZE, 1)
+                    begin_w = tf.expand_dims(
+                        [targ_lang.word2idx[BEGIN_TAG]] * MODEL_BATCH_SIZE, 1)
+                    action_words_enc = [begin_w] + [
+                        tf.expand_dims([targ_lang.word2idx[token]]
+                                       * MODEL_BATCH_SIZE, 1)
+                        for token in char_tokenizer(action)]
 
-                loss = 0  # loss for decoder
-                pg_loss = 0  # loss for semantic
+                    for curr_w_idx in action_words_enc:
+                        w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)
+                        # TODO: check if softmax is necessary
+                        # w_probs = tf.nn.softmax(w_probs)
+                        dist = tf.distributions.Categorical(w_probs[0])
+                        # TODO: check formulation
+                        loss += - dist.log_prob(curr_w_idx) * norm_reward
 
-                result = ''
-                for t in range(1, targ.shape[1]):
-                    actions = []
-                    probs = []
-                    rewards = []
-                    predictions, dec_hidden = model.decoder(
-                        dec_input, dec_hidden)
-                    # using teacher forcing
-                    dec_input = tf.expand_dims(targ[:, t], 1)
-                    for ps in predictions:
-                        top_k_indices = tf.nn.top_k(ps, TOP_K).indices.numpy()
-                        action = np.random.choice(top_k_indices, 1)[0]
-                        actions.append(action)
-                        prob = ps.numpy()[action]
-                        probs.append(prob)
-                        reward = np.mean(sim_scores[:, action])
-                        # print(targ_lang.idx2word[action], reward)
-                        rewards.append(reward)
+            # calculate cumulative gradients
+            model_vars = encoder.variables + decoder.variables
+            grads = tape.gradient(loss, model_vars)
+            # this may be the place if we want to experiment with variable learning rates
+            # grads = grads * lr
 
-                        # normalize reward
-                        reward_mean = np.mean(rewards)
-                        reward_std = np.std(rewards)
-                        norm_rewards = [(r - reward_mean) /
-                                        reward_std for r in rewards]
+            # finally, apply gradient
+            optimizer.apply_gradients(
+                zip(grads, model_vars),
+            )
 
-                    if targ_lang.idx2word[actions[0]] == END_TAG:
-                        pass
-                    else:
-                        result += ' ' + targ_lang.idx2word[actions[0]]
-
-                    onehot_labels = tf.keras.utils.to_categorical(
-                        y=actions, num_classes=len(targ_lang.word2idx))
-
-                    norm_rewards = tf.convert_to_tensor(
-                        norm_rewards, dtype="float32") * GAMMA
-                    # print(onehot_labels.shape)
-                    # print(predictions.shape)
-                    loss += model.loss_function(targ[:, t], predictions)
-                    # print("------")
-                    # print(loss)
-                    # print(probs)
-                    #pg_loss_cross = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=onehot_labels, logits=targ[:, t]))
-                    pg_loss_cross = model.loss_function(
-                        targ[:, t], onehot_labels)
-                    pg_loss_cross = tf.reduce_mean(
-                        pg_loss_cross * norm_rewards)
-                    # print(pg_loss_cross)
-                    # print("------")
-                    # print(pg_loss_cross)
-                    pg_loss += pg_loss_cross
-                print("result: ", result)
-                # End of Episode
-                # Update policy
-                batch_loss = ((loss + pg_loss) / int(targ.shape[1]))
-                total_loss += batch_loss
-                variables = model.encoder.variables + model.decoder.variables
-                gradients = tape.gradient(loss, variables)
-                optimizer.apply_gradients(zip(gradients, variables))
-                if batch % 10 == 0:
-                    print('batch {} training loss {:.4f}'.format(
-                        batch, total_loss.numpy()))
-
-        # saving (checkpoint) the model every 100 epochs
-        if (episode + 1) % 100 == 0:
-            checkpoint.save(file_prefix=checkpoint_prefix)
-
-        print('Time taken for {} episode {} sec\n'.format(
-            episode, time.time() - start))
+            # Reset everything for the next episode
+            history = []
 
 
 main()

@@ -27,23 +27,23 @@ class LanguageIndex():
         self.create_index()
 
     def create_index(self):
-        self.vocab = set()
+        vocab = set()
         for phrase in self.samples:
-            self.vocab.update(self._tokenizer(phrase))
+            phrase = phrase.lower()
+            vocab.update(self._tokenizer(phrase))
 
-        sorted_vocab = sorted(self.vocab)
+        sorted_vocab = sorted(vocab)
 
         self.word2idx[self._empty_token] = EMPTY_IDX
         self.word2idx[self._unknown_token] = UNKNOWN_IDX
-
+        prefix = [EMPTY_IDX, UNKNOWN_IDX]
         for index, word in enumerate(sorted_vocab):
-            self.word2idx[word] = index + len([EMPTY_IDX, UNKNOWN_IDX])
+            self.word2idx[word] = len(prefix) + index
 
         for word, index in self.word2idx.items():
             self.idx2word[index] = word
 
-        self.vocab.update(self._empty_token)
-        self.vocab.update(self._unknown_token)
+        self.vocab = prefix + sorted_vocab
 
 # class LanguageIndex():
 #     def __init__(self, samples, tokenizer=tokenize_sentence, empty_token='<pad>'):
