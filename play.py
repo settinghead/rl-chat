@@ -4,6 +4,7 @@ import numpy as np
 from itertools import count
 from encoder_decoder import Encoder, Decoder, initialize_hidden_state
 from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
+from agent import Baseline
 import data
 import random
 
@@ -13,7 +14,7 @@ import random
 EPISODES = 10000000
 BATCH_SIZE = 128
 # MODEL_BATCH_SIZE = 1
-GAMMA = 0.1  # TODO
+GAMMA = 0  # TODO
 USE_GLOVE = False
 if USE_GLOVE:
     # 1024 if using glove
@@ -44,7 +45,12 @@ def main():
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
                       batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
+    baseline = Baseline()
+
     history = []
+
+    l_optimizer = tf.train.AdamOptimizer()
+    bl_optimizer = tf.train.AdamOptimizer()
 
     for episode in range(EPISODES):
 
@@ -126,8 +132,9 @@ def main():
             )
             print("avg reward: ", sum(
                 acc_reward_b) / len(acc_reward_b))
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
-            loss_b = 0
+
+            loss = 0
+            loss_bl = 0
 
             def sentence_to_idxs(sentence: str):
                 return [env.lang.word2idx[token]
@@ -149,7 +156,7 @@ def main():
                     padding='post'
                 )
 
-            with tf.GradientTape() as tape:
+            with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
                 init_hidden_b = initialize_hidden_state(BATCH_SIZE, UNITS)
 
@@ -159,6 +166,12 @@ def main():
                 ])
                 state_inp_b = maybe_pad_sentence(state_inp_b)
                 state_inp_b = tf.convert_to_tensor(state_inp_b)
+
+                bl_val = baseline(tf.cast(state_inp_b, 'float32'))
+                norm_reward_b = tf.cast(
+                    tf.convert_to_tensor(norm_reward_b), 'float32')
+                norm_reward_b -= bl_val
+
                 action_encs_b = maybe_pad_sentence(action_encs_b)
                 action_encs_b = tf.expand_dims(
                     tf.convert_to_tensor(action_encs_b), -1)
@@ -171,18 +184,19 @@ def main():
                     # w_probs = tf.nn.softmax(w_probs)
                     dist = tf.distributions.Categorical(w_probs_b)
                     # TODO: check formulation
-                    loss_b += - dist.log_prob(curr_w_idx_b) * norm_reward_b
+                    loss += - dist.log_prob(curr_w_idx_b) * norm_reward_b
+                    loss_bl += dist.log_prob(curr_w_idx_b) * norm_reward_b
 
             # calculate cumulative gradients
             model_vars = encoder.variables + decoder.variables
-            grads = tape.gradient(loss_b, model_vars)
+            grads = l_tape.gradient(loss, model_vars)
+            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
             # this may be the place if we want to experiment with variable learning rates
             # grads = grads * lr
 
             # finally, apply gradient
-            optimizer.apply_gradients(
-                zip(grads, model_vars),
-            )
+            l_optimizer.apply_gradients(zip(grads, model_vars))
+            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
 
             # Reset everything for the next episode
             history = []

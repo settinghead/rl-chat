@@ -6,7 +6,7 @@ from itertools import takewhile
 import random
 from difflib import SequenceMatcher
 
-CONVO_LEN = 15
+CONVO_LEN = 16
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
 BEGIN_TAG = "▶"
@@ -42,7 +42,7 @@ class Environment:
             # if reward > 0:
             #     print(last_from_env, "|", action)
 
-        done = len(self.history) > CONVO_LEN
+        done = len(self.history) >= CONVO_LEN
         self.history.append(action)
 
         state = random.sample(self._questions, 1)[0]

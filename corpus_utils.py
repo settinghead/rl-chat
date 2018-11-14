@@ -21,7 +21,7 @@ class LanguageIndex():
                  unknown_token='<unk>'):
         self._tokenizer = tokenizer
         self.samples = samples
-        self._empty_token = empty_token
+        self.empty_token = empty_token
         self._unknown_token = unknown_token
         self.word2idx = defaultdict(lambda: UNKNOWN_IDX)
         self.idx2word = {}
@@ -35,7 +35,7 @@ class LanguageIndex():
 
         sorted_vocab = sorted(vocab)
 
-        self.word2idx[self._empty_token] = EMPTY_IDX
+        self.word2idx[self.empty_token] = EMPTY_IDX
         self.word2idx[self._unknown_token] = UNKNOWN_IDX
         prefix = [EMPTY_IDX, UNKNOWN_IDX]
         for index, word in enumerate(sorted_vocab):

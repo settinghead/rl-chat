@@ -37,7 +37,7 @@ if __name__ == "__main__":
     vocab_tar_size = len(targ_lang.word2idx)
 
     optimizer = tf.train.AdamOptimizer()
-    EPOCHS = 10000
+    EPOCHS = 1000000
 
     input_tensor = [[inp_lang.word2idx[token] for token in tokenize_sentence(
         question)] for question in questions]
