@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
 from encoder_decoder import Encoder, Decoder, initialize_hidden_state
-from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG
+from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 import data
 import random
 
@@ -11,8 +11,8 @@ import random
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000000
-BATCH_SIZE = 64
-MODEL_BATCH_SIZE = 1
+BATCH_SIZE = 128
+# MODEL_BATCH_SIZE = 1
 GAMMA = 0.1  # TODO
 USE_GLOVE = False
 if USE_GLOVE:
@@ -40,9 +40,9 @@ def main():
     vocab_tar_size = len(targ_lang.word2idx)
 
     encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, UNITS,
-                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, inp_lang=env.lang.vocab)
+                      batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, inp_lang=env.lang.vocab)
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
-                      batch_sz=MODEL_BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
+                      batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
     history = []
 
@@ -58,7 +58,7 @@ def main():
             # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
-            init_hidden = initialize_hidden_state(MODEL_BATCH_SIZE, UNITS)
+            init_hidden = initialize_hidden_state(1, UNITS)
             state_inp = [env.lang.word2idx[token]
                          for token in char_tokenizer(state)]
             enc_hidden = encoder(
@@ -67,7 +67,7 @@ def main():
 
             w = BEGIN_TAG
             curr_w_enc = tf.expand_dims(
-                [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
+                [targ_lang.word2idx[w]] * 1, 1)
 
             outputs = [w]
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
@@ -77,7 +77,7 @@ def main():
                 # w_idx = tf.argmax(w_probs[0]).numpy()
                 w = targ_lang.idx2word[w_idx]
                 curr_w_enc = tf.expand_dims(
-                    [targ_lang.word2idx[w]] * MODEL_BATCH_SIZE, 1)
+                    [targ_lang.word2idx[w]] * 1, 1)
                 outputs.append(w)
             # action is a sentence (string)
             action = ''.join(outputs)
@@ -88,10 +88,9 @@ def main():
 
             # record history (to be used for gradient updating after the episode is done)
         # End of Episode
-
         # Update policy
-        if episode > 0 and episode % BATCH_SIZE == 0:
-
+        if episode > 0 and (episode + 1) % (BATCH_SIZE / CONVO_LEN * 2) == 0:
+            print(len(history))
             print("==========================")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
@@ -106,58 +105,77 @@ def main():
             # may not be correct for our purpose.
             running_add = 0
 
-            acc_rewards = []
+            acc_reward_b = []
 
             for _, _, curr_reward in reversed(history):
                 if curr_reward == 0:
                     running_add = 0
                 else:
                     running_add = running_add * GAMMA + curr_reward
-                acc_rewards.append(curr_reward)
-            acc_rewards = list(reversed(acc_rewards))
+                acc_reward_b.append(curr_reward)
+            acc_reward_b = list(reversed(acc_reward_b))
 
             # normalize reward
-            reward_mean = np.mean(acc_rewards)
-            reward_std = np.std(acc_rewards)
-            norm_rewards = [(r - reward_mean) /
-                            reward_std for r in acc_rewards]
+            reward_mean = np.mean(acc_reward_b)
+            reward_std = np.std(acc_reward_b)
+            norm_reward_b = [(r - reward_mean) /
+                             reward_std for r in acc_reward_b]
             print(
                 "all rewards: min=%f, max=%f, median=%f" %
-                (np.min(acc_rewards), np.max(acc_rewards), np.median(acc_rewards))
+                (np.min(acc_reward_b), np.max(acc_reward_b), np.median(acc_reward_b))
             )
             print("avg reward: ", sum(
-                acc_rewards) / len(acc_rewards))
+                acc_reward_b) / len(acc_reward_b))
             optimizer = tf.train.AdamOptimizer(learning_rate=0.01)
-            loss = 0
+            loss_b = 0
+
+            def sentence_to_idxs(sentence: str):
+                return [env.lang.word2idx[token]
+                        for token in char_tokenizer(sentence)]
+
+            def action_to_encs(action: str):
+                begin_w = tf.expand_dims(
+                    [targ_lang.word2idx[BEGIN_TAG]], 1)
+                enc = [begin_w] + [
+                    tf.expand_dims([targ_lang.word2idx[token]], 1)
+                    for token in char_tokenizer(action)
+                ]
+                return enc
+
+            def maybe_pad_sentence(s):
+                return tf.keras.preprocessing.sequence.pad_sequences(
+                    s,
+                    maxlen=MAX_TARGET_LEN,
+                    padding='post'
+                )
+
             with tf.GradientTape() as tape:
                 # accumulate gradient with GradientTape
-                for (state, action, _), norm_reward in zip(history, norm_rewards):
-                    init_hidden = initialize_hidden_state(
-                        MODEL_BATCH_SIZE, UNITS)
-                    state_inp = [env.lang.word2idx[token]
-                                 for token in char_tokenizer(state)]
-                    enc_hidden = encoder(
-                        tf.convert_to_tensor([state_inp]), init_hidden)
-                    dec_hidden = enc_hidden
+                init_hidden_b = initialize_hidden_state(BATCH_SIZE, UNITS)
 
-                    begin_w = tf.expand_dims(
-                        [targ_lang.word2idx[BEGIN_TAG]] * MODEL_BATCH_SIZE, 1)
-                    action_words_enc = [begin_w] + [
-                        tf.expand_dims([targ_lang.word2idx[token]]
-                                       * MODEL_BATCH_SIZE, 1)
-                        for token in char_tokenizer(action)]
-
-                    for curr_w_idx in action_words_enc:
-                        w_probs, dec_hidden = decoder(curr_w_idx, dec_hidden)
-                        # TODO: check if softmax is necessary
-                        # w_probs = tf.nn.softmax(w_probs)
-                        dist = tf.distributions.Categorical(w_probs[0])
-                        # TODO: check formulation
-                        loss += - dist.log_prob(curr_w_idx) * norm_reward
+                state_inp_b, action_encs_b = zip(*[
+                    [sentence_to_idxs(state), action_to_encs(action)]
+                    for (state, action, _), norm_reward in zip(history, norm_reward_b)
+                ])
+                state_inp_b = maybe_pad_sentence(state_inp_b)
+                state_inp_b = tf.convert_to_tensor(state_inp_b)
+                action_encs_b = maybe_pad_sentence(action_encs_b)
+                action_encs_b = tf.expand_dims(
+                    tf.convert_to_tensor(action_encs_b), -1)
+                enc_hidden_b = encoder(state_inp_b, init_hidden_b)
+                dec_hidden_b = enc_hidden_b
+                for i in range(action_encs_b.shape[1]):
+                    curr_w_idx_b = action_encs_b[:, i]
+                    w_probs_b, dec_hidden_b = decoder(
+                        curr_w_idx_b, dec_hidden_b)
+                    # w_probs = tf.nn.softmax(w_probs)
+                    dist = tf.distributions.Categorical(w_probs_b)
+                    # TODO: check formulation
+                    loss_b += - dist.log_prob(curr_w_idx_b) * norm_reward_b
 
             # calculate cumulative gradients
             model_vars = encoder.variables + decoder.variables
-            grads = tape.gradient(loss, model_vars)
+            grads = tape.gradient(loss_b, model_vars)
             # this may be the place if we want to experiment with variable learning rates
             # grads = grads * lr
 
