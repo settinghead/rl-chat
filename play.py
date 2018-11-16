@@ -14,14 +14,14 @@ import random
 EPISODES = 10000000
 BATCH_SIZE = 128
 # MODEL_BATCH_SIZE = 1
-GAMMA = 0  # TODO
+GAMMA = 0.7  # TODO
 USE_GLOVE = False
 if USE_GLOVE:
     # 1024 if using glove
     EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 16
+    EMBEDDING_DIM = 5
 
 MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
@@ -49,8 +49,8 @@ def main():
 
     history = []
 
-    l_optimizer = tf.train.AdamOptimizer()
-    bl_optimizer = tf.train.AdamOptimizer()
+    l_optimizer = tf.train.RMSPropOptimizer(0.01)
+    bl_optimizer = tf.train.RMSPropOptimizer(0.01)
 
     for episode in range(EPISODES):
 
@@ -73,7 +73,8 @@ def main():
 
             w = BEGIN_TAG
             curr_w_enc = tf.expand_dims(
-                [targ_lang.word2idx[w]] * 1, 1)
+                [targ_lang.word2idx[w]], 0
+            )
 
             outputs = [w]
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
@@ -96,7 +97,6 @@ def main():
         # End of Episode
         # Update policy
         if episode > 0 and (episode + 1) % (BATCH_SIZE / CONVO_LEN * 2) == 0:
-            print(len(history))
             print("==========================")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
@@ -118,7 +118,7 @@ def main():
                     running_add = 0
                 else:
                     running_add = running_add * GAMMA + curr_reward
-                acc_reward_b.append(curr_reward)
+                acc_reward_b.append(running_add)
             acc_reward_b = list(reversed(acc_reward_b))
 
             # normalize reward
@@ -177,7 +177,8 @@ def main():
                     tf.convert_to_tensor(action_encs_b), -1)
                 enc_hidden_b = encoder(state_inp_b, init_hidden_b)
                 dec_hidden_b = enc_hidden_b
-                for i in range(action_encs_b.shape[1]):
+                max_sentence_len = action_encs_b.shape[1]
+                for i in range(max_sentence_len):
                     curr_w_idx_b = action_encs_b[:, i]
                     w_probs_b, dec_hidden_b = decoder(
                         curr_w_idx_b, dec_hidden_b)
@@ -185,7 +186,7 @@ def main():
                     dist = tf.distributions.Categorical(w_probs_b)
                     # TODO: check formulation
                     loss += - dist.log_prob(curr_w_idx_b) * norm_reward_b
-                    loss_bl += dist.log_prob(curr_w_idx_b) * norm_reward_b
+                    loss_bl += norm_reward_b
 
             # calculate cumulative gradients
             model_vars = encoder.variables + decoder.variables

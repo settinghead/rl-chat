@@ -46,6 +46,7 @@ class Environment:
         self.history.append(action)
 
         state = random.sample(self._questions, 1)[0]
+        # state = "hello"
         state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
         state = ''.join(state)
         state = f'{BEGIN_TAG}{state}{END_TAG}'
@@ -89,7 +90,11 @@ class Environment:
 if __name__ == "__main__":
     env = Environment()
     done = False
+    action = ""
+    state = ""
     while not done:
-        action = "hello"
+        # action = "hello"
+        prev_state = state
         state, reward, done = env.step(action)
-        print(f"bot: {action} -> env: {state} reward: {reward}")
+        print(f"env: {prev_state} -> bot: {action} reward: {reward}")
+        action = state
