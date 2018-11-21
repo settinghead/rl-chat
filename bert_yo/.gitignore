@@ -118,3 +118,5 @@ dmypy.json
 /mrpc_output/
 /glue_data/
 /pretrained/
+/squad_data/
+/checkpoints

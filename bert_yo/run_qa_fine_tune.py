@@ -19,7 +19,8 @@ flags = tf.flags
 
 FLAGS = flags.FLAGS
 
-BERT_BASE_DIR = './pretrained/uncased_L-24_H-1024_A-16/'
+BERT_BASE_DIR = './pretrained/uncased_L-24_H-1024_A-16'
+SQUAD_DIR = './squad_data'
 
 # Required parameters
 flags.DEFINE_string(
@@ -35,16 +36,9 @@ flags.DEFINE_string(
     "The output directory where the model checkpoints will be written.")
 
 # Other parameters
-flags.DEFINE_string("train_file", None,
-                    "SQuAD json for training. E.g., train-v1.1.json")
-
-flags.DEFINE_string(
-    "predict_file", None,
-    "SQuAD json for predictions. E.g., dev-v1.1.json or test-v1.1.json")
-
-flags.DEFINE_string(
-    "init_checkpoint", f'{BERT_BASE_DIR}/bert_model.ckpt',
-    "Initial checkpoint (usually from a pre-trained BERT model).")
+flags.DEFINE_string("train_file", f"{SQUAD_DIR}/train-v1.1.json", "")
+flags.DEFINE_string("predict_file", f"{SQUAD_DIR}/dev-v1.1.json", "")
+flags.DEFINE_string("init_checkpoint", f'{BERT_BASE_DIR}/bert_model.ckpt', "")
 
 flags.DEFINE_bool(
     "do_lower_case", True,
@@ -67,7 +61,7 @@ flags.DEFINE_integer(
     "The maximum number of tokens for the question. Questions longer than "
     "this will be truncated to this length.")
 
-flags.DEFINE_bool("do_train", False, "Whether to run training.")
+flags.DEFINE_bool("do_train", True, "Whether to run training.")
 
 flags.DEFINE_bool("do_predict", False, "Whether to run eval on the dev set.")
 
@@ -76,7 +70,7 @@ flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
 flags.DEFINE_integer("predict_batch_size", 8,
                      "Total batch size for predictions.")
 
-flags.DEFINE_float("learning_rate", 5e-5,
+flags.DEFINE_float("learning_rate", 3e-5,
                    "The initial learning rate for Adam.")
 
 flags.DEFINE_float("num_train_epochs", 3.0,
@@ -120,6 +114,11 @@ flags.DEFINE_float(
     "If null_score - best_non_null is greater than the threshold predict null.")
 
 
+class SquadExample(object):
+  """A single training/test example for simple sequence classification.
+
+     For examples without an answer, the start and end position are -1.
+  """
   def __init__(self,
                qas_id,
                question_text,
@@ -583,12 +582,7 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       (assignment_map, initialized_variable_names
       ) = modeling.get_assignment_map_from_checkpoint(tvars, init_checkpoint)
       if use_tpu:
-
-        def tpu_scaffold():
-          tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
-          return tf.train.Scaffold()
-
-        scaffold_fn = tpu_scaffold
+        raise NotImplementedError
       else:
         tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
@@ -1093,21 +1087,9 @@ def main(_):
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 
-  tpu_cluster_resolver = None
-  if FLAGS.use_tpu and FLAGS.tpu_name:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-
-  is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
   run_config = tf.contrib.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
-      master=FLAGS.master,
       model_dir=FLAGS.output_dir,
-      save_checkpoints_steps=FLAGS.save_checkpoints_steps,
-      tpu_config=tf.contrib.tpu.TPUConfig(
-          iterations_per_loop=FLAGS.iterations_per_loop,
-          num_shards=FLAGS.num_tpu_cores,
-          per_host_input_for_training=is_per_host))
+      save_checkpoints_steps=FLAGS.save_checkpoints_steps)
 
   train_examples = None
   num_train_steps = None
@@ -1235,7 +1217,7 @@ def main(_):
 
 
 if __name__ == "__main__":
-  flags.mark_flag_as_required("vocab_file")
-  flags.mark_flag_as_required("bert_config_file")
-  flags.mark_flag_as_required("output_dir")
+  # flags.mark_flag_as_required("vocab_file")
+  # flags.mark_flag_as_required("bert_config_file")
+  # flags.mark_flag_as_required("output_dir")
   tf.app.run()
