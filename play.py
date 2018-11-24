@@ -104,15 +104,16 @@ def main():
                 ]))
 
             batch = history[:BATCH_SIZE]
-            print("==========================")
+            print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
             good_rewards = [(s, a, r) for s, a, r in batch if r > 0]
-            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 5)):
+            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
                 print("prev_state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
                 # print("return: ", get_returns(r, MAX_TARGET_LEN))
+            print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
             def sentence_to_idxs(sentence: str):
                 return [env.lang.word2idx[token]
