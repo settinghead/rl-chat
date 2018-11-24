@@ -12,7 +12,7 @@ import random
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000000
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 # MODEL_BATCH_SIZE = 1
 GAMMA = 1  # TODO
 USE_GLOVE = False
@@ -147,9 +147,9 @@ def main():
             action_encs_b = tf.expand_dims(
                 tf.convert_to_tensor(action_encs_b), -1)
 
-            # reward_mean = np.mean(ret_seq_b)
-            # reward_std = np.std(ret_seq_b)
-            # ret_seq_b = [(r - reward_mean) / reward_std for r in ret_seq_b]
+            reward_mean = np.mean(ret_seq_b)
+            reward_std = np.std(ret_seq_b)
+            ret_seq_b = (ret_seq_b - reward_mean) / reward_std
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
@@ -196,10 +196,12 @@ def main():
                     #     tf.transpose(dist.log_prob(
                     #         tf.transpose(curr_w_idx_b))), delta_b
                     # )
-                    loss += -tf.math.multiply(
+                    cost_b = -tf.math.multiply(
                         tf.transpose(dist.log_prob(
                             tf.transpose(curr_w_idx_b))), ret_b
                     )
+                    # print(cost_b.shape)
+                    loss += cost_b
 
                     prev_w_idx_b = curr_w_idx_b
 

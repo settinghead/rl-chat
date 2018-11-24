@@ -6,7 +6,7 @@ from itertools import takewhile
 import random
 from difflib import SequenceMatcher
 
-CONVO_LEN = 64
+CONVO_LEN = 32
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
 BEGIN_TAG = "▶"
