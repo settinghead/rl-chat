@@ -147,9 +147,9 @@ def main():
             action_encs_b = tf.expand_dims(
                 tf.convert_to_tensor(action_encs_b), -1)
 
-            reward_mean = np.mean(ret_seq_b)
-            reward_std = np.std(ret_seq_b)
-            ret_seq_b = (ret_seq_b - reward_mean) / reward_std
+            ret_mean = np.mean(ret_seq_b)
+            ret_std = np.std(ret_seq_b)
+            ret_seq_b = (ret_seq_b - ret_mean) / ret_std
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
