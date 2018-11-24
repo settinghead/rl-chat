@@ -12,7 +12,7 @@ import random
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000000
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 # MODEL_BATCH_SIZE = 1
 GAMMA = 1  # TODO
 USE_GLOVE = False
@@ -49,8 +49,8 @@ def main():
 
     history = []
 
-    l_optimizer = tf.train.RMSPropOptimizer(0.01)
-    bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    l_optimizer = tf.train.AdamOptimizer()
+    # bl_optimizer = tf.train.RMSPropOptimizer(0.01)
 
     for episode in range(EPISODES):
 
@@ -160,7 +160,7 @@ def main():
             print("avg reward: ", sum(reward_b) / len(reward_b))
 
             loss = 0
-            loss_bl = 0
+            # loss_bl = 0
 
             with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
@@ -181,39 +181,40 @@ def main():
                 )
                 for t in range(max_sentence_len):
 
-                    bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
-                    delta_b = ret_b - bl_val_b
+                    # delta_b = ret_b - bl_val_b
 
                     w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
                     curr_w_idx_b = action_encs_b[:, t]
                     dist = tf.distributions.Categorical(probs=w_probs_b)
-                    loss_bl += - \
-                        tf.reduce_sum(tf.math.multiply(delta_b, bl_val_b))
-                    loss += -tf.reduce_sum(tf.math.multiply(
-                        tf.transpose(dist.log_prob(
-                            tf.transpose(curr_w_idx_b))), delta_b
-                    ))
-                    # loss += -tf.reduce_sum(tf.math.multiply(
+                    # loss_bl += - \
+                    #     tf.math.multiply(delta_b, bl_val_b)
+                    # loss += tf.math.multiply(
                     #     tf.transpose(dist.log_prob(
-                    #         tf.transpose(curr_w_idx_b))), ret_b
-                    # ))
+                    #         tf.transpose(curr_w_idx_b))), delta_b
+                    # )
+                    loss += -tf.math.multiply(
+                        tf.transpose(dist.log_prob(
+                            tf.transpose(curr_w_idx_b))), ret_b
+                    )
 
                     prev_w_idx_b = curr_w_idx_b
 
-            print("Avg loss: ", tf.reduce_mean(loss).numpy())
+            print("avg loss: ", tf.reduce_mean(loss).numpy())
 
             # calculate cumulative gradients
 
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
-            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
+            print("avg grad: ", np.mean(grads[1].numpy()))
+            # grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
 
             # finally, apply gradient
             l_optimizer.apply_gradients(zip(grads, model_vars))
-            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
+            # bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
