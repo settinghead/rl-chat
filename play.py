@@ -45,7 +45,7 @@ def main():
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
                       batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
-    baseline = Baseline()
+    baseline = Baseline(UNITS)
 
     history = []
 
@@ -147,9 +147,9 @@ def main():
             action_encs_b = tf.expand_dims(
                 tf.convert_to_tensor(action_encs_b), -1)
 
-            reward_mean = np.mean(ret_seq_b)
-            reward_std = np.std(ret_seq_b)
-            ret_seq_b = [(r - reward_mean) / reward_std for r in ret_seq_b]
+            # reward_mean = np.mean(ret_seq_b)
+            # reward_std = np.std(ret_seq_b)
+            # ret_seq_b = [(r - reward_mean) / reward_std for r in ret_seq_b]
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
@@ -179,28 +179,37 @@ def main():
                         'float32'
                     ), -1
                 )
-                for i in range(max_sentence_len):
+                for t in range(max_sentence_len):
 
                     bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
-                    ret_b = ret_seq_b[:, i]
+                    ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
                     delta_b = ret_b - bl_val_b
 
                     w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
-                    curr_w_idx_b = action_encs_b[:, i]
-                    dist = tf.distributions.Categorical(w_probs_b)
-                    loss += dist.log_prob(curr_w_idx_b) * ret_b
-                    loss_bl += ret_b * delta_b
+                    curr_w_idx_b = action_encs_b[:, t]
+                    dist = tf.distributions.Categorical(probs=w_probs_b)
+                    loss_bl += - \
+                        tf.reduce_sum(tf.math.multiply(delta_b, bl_val_b))
+                    loss += -tf.reduce_sum(tf.math.multiply(
+                        tf.transpose(dist.log_prob(
+                            tf.transpose(curr_w_idx_b))), delta_b
+                    ))
+                    # loss += -tf.reduce_sum(tf.math.multiply(
+                    #     tf.transpose(dist.log_prob(
+                    #         tf.transpose(curr_w_idx_b))), ret_b
+                    # ))
 
                     prev_w_idx_b = curr_w_idx_b
 
+            print("Avg loss: ", tf.reduce_mean(loss).numpy())
+
             # calculate cumulative gradients
+
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
             grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
-            # this may be the place if we want to experiment with variable learning rates
-            # grads = grads * lr
 
             # finally, apply gradient
             l_optimizer.apply_gradients(zip(grads, model_vars))
