@@ -1,6 +1,6 @@
 #import pudb
 
-#pudb.set_trace()
+# pudb.set_trace()
 
 import tensorflow as tf
 #import matplotlib.pyplot as plt
@@ -49,7 +49,7 @@ def main():
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
                       batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
-    baseline = Baseline(UNITS)
+    # baseline = Baseline(UNITS)
 
     history = []
 
@@ -100,24 +100,13 @@ def main():
             # record history (to be used for gradient updating after the episode is done)
         # End of Episode
         # Update policy
-        if len(history) >= BATCH_SIZE:
+        while len(history) >= BATCH_SIZE:
+            batch = history[:BATCH_SIZE]
 
             def get_returns(r: float, seq_len: int):
                 return list(reversed([
                     r * (GAMMA ** t) for t in range(seq_len)
                 ]))
-
-            batch = history[:BATCH_SIZE]
-            print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
-            print("Episode # ", episode)
-            print("Samples from episode with rewards > 0: ")
-            good_rewards = [(s, a, r) for s, a, r in batch if r > 0]
-            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
-                print("prev_state: ", s)
-                print("action: ", a)
-                print("reward: ", r)
-                # print("return: ", get_returns(r, MAX_TARGET_LEN))
-            print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
             def sentence_to_idxs(sentence: str):
                 return [env.lang.word2idx[token]
@@ -148,23 +137,16 @@ def main():
                 ]
                 for state, action, reward in batch
             ])
-        
-            
+
             action_encs_b = maybe_pad_sentence(action_encs_b)
             action_encs_b = tf.expand_dims(
                 tf.convert_to_tensor(action_encs_b), -1)
 
-            ret_mean = np.mean(ret_seq_b)
-            ret_std = np.std(ret_seq_b)
-            ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            # ret_mean = np.mean(ret_seq_b)
+            # ret_std = np.std(ret_seq_b)
+            # ret_seq_b = (ret_seq_b - ret_mean) / ret_std
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
-
-            print(
-                "all returns: min=%f, max=%f, median=%f" %
-                (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
-            )
-            print("avg reward: ", sum(reward_b) / len(reward_b))
 
             loss = 0
             # loss_bl = 0
@@ -212,13 +194,11 @@ def main():
 
                     prev_w_idx_b = curr_w_idx_b
 
-            print("avg loss: ", tf.reduce_mean(loss).numpy())
-
             # calculate cumulative gradients
 
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
-            print("avg grad: ", np.mean(grads[1].numpy()))
+
             # grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
 
             # finally, apply gradient
@@ -227,6 +207,25 @@ def main():
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
+
+        if episode % 5 == 0:
+            print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
+            print("Episode # ", episode)
+            print("Samples from episode with rewards > 0: ")
+            good_rewards = [(s, a, r) for s, a, r in batch if r > 0]
+            for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
+                print("prev_state: ", s)
+                print("action: ", a)
+                print("reward: ", r)
+                # print("return: ", get_returns(r, MAX_TARGET_LEN))
+            print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
+            print(
+                "all returns: min=%f, max=%f, median=%f" %
+                (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
+            )
+            print("avg reward: ", sum(reward_b) / len(reward_b))
+            print("avg loss: ", tf.reduce_mean(loss).numpy())
+            print("avg grad: ", np.mean(grads[1].numpy()))
 
 
 main()
