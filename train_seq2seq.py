@@ -22,13 +22,13 @@ if __name__ == "__main__":
     questions = list(questions1) + list(questions2)
     answers = list(answers1) + list(answers2)
     # questions, answers = data.load_conv_text()
-
     inp_lang = LanguageIndex(questions)
     targ_lang = LanguageIndex(answers)
 
-    BATCH_SIZE = 512
+    BATCH_SIZE = 32
 
     EMBEDDING_DIM = get_embedding_dim(USE_GLOVE)
+
     units = 512
 
     print("Vocab size: ", len(inp_lang.vocab), len(targ_lang.vocab))
@@ -72,16 +72,19 @@ if __name__ == "__main__":
         (input_tensor_val, target_tensor_val)).shuffle(EVAL_BUFFER_SIZE)
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
-
+    
     # model: encoder_decoder.Seq2Seq = utils.load_trained_model(
-    #     BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
-
+    #      BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
+    
     model = encoder_decoder.Seq2Seq(
         vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, units, BATCH_SIZE,
         inp_lang=inp_lang, targ_lang=targ_lang,
+        max_length_tar=max_length_tar,
         use_GloVe=USE_GLOVE,
-        display_result=True
+        display_result=True,
+        use_beam_search=True
     )
+    
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -91,11 +94,10 @@ if __name__ == "__main__":
         start = time.time()
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
-
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 200 == 0:
-            checkpoint.save(file_prefix=checkpoint_prefix)
+        if (epoch + 1) % 100 == 0:
+            #checkpoint.save(file_prefix=checkpoint_prefix)
 
-        print('Time taken for epoch {}: {} sec\n'.format(
-            epoch, time.time() - start)
-        )
+            print('Time taken for epoch {}: {} sec\n'.format(
+                epoch, time.time() - start)
+            )
