@@ -5,7 +5,7 @@ import time
 import utils
 from embedding_utils import get_GloVe_embeddings
 from data import BEGIN_TAG, END_TAG
-
+import beam_search
 
 def gru(units):
     if tf.test.is_gpu_available():
@@ -92,10 +92,6 @@ class Encoder(tf.keras.Model):
         return state
 
 
-def initialize_hidden_state(batch_sz, num_enc_units):
-    return tf.zeros((batch_sz, num_enc_units))
-
-
 class Decoder(tf.keras.Model):
     def __init__(
         self,
@@ -135,8 +131,8 @@ class Decoder(tf.keras.Model):
             output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
         x = tf.reshape(x, [x.shape[0], self.vocab_size])
-        logits = tf.nn.softmax(x)
-        return logits, state
+        predicts = tf.nn.softmax(x)
+        return predicts, state
 
 
 class Seq2Seq(tf.keras.Model):
@@ -149,8 +145,11 @@ class Seq2Seq(tf.keras.Model):
         batch_sz,
         inp_lang,
         targ_lang,
+        max_length_tar,
         use_GloVe=False,
-        display_result=False
+        display_result=False,
+        beam_size = 7,
+        use_beam_search=False
     ):
 
         super(Seq2Seq, self).__init__()
@@ -163,11 +162,18 @@ class Seq2Seq(tf.keras.Model):
         self.encoder = Encoder(vocab_inp_size, embedding_dim,
                                enc_units, batch_sz, use_GloVe, inp_lang.vocab)
         self.decoder = Decoder(vocab_tar_size, embedding_dim,
-                               enc_units, batch_sz, use_GloVe, targ_lang.vocab)
-        self.hidden = initialize_hidden_state(batch_sz, enc_units)
+                        enc_units, batch_sz, use_GloVe, targ_lang.vocab)
+        self.hidden = tf.zeros((batch_sz, enc_units))
+        self.max_length_tar = max_length_tar
         self.display_result = display_result
+        self.use_beam_search = use_beam_search
+        self.beam_size = beam_size
+        self.beam_search_decoder = Decoder(vocab_tar_size, embedding_dim,
+                        enc_units, 1, use_GloVe, targ_lang.vocab)
+            
 
     def loss_function(self, real, pred):
+        #if it's PAD, loss is 0
         mask = 1 - np.equal(real, 0)
         loss_ = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=real, logits=pred) * mask
@@ -178,47 +184,44 @@ class Seq2Seq(tf.keras.Model):
         enc_hidden = self.encoder(inp, self.hidden)
         dec_hidden = enc_hidden
         dec_input = tf.expand_dims(
-            [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
+                    [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
         result = ''
-        # Teacher forcing - feeding the target as the next input
+        if self.use_beam_search:
+            bs = beam_search.BeamSearch(self.beam_size,
+                    self.targ_lang.word2idx[BEGIN_TAG],
+                    self.targ_lang.word2idx[END_TAG],
+                    self.targ_lang,
+                    self.max_length_tar,
+                    self.batch_sz,
+                    self.beam_search_decoder)
         for t in range(1, targ.shape[1]):
-            predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
-            loss += self.loss_function(targ[:, t], predictions)
-            predicted_id = tf.argmax(predictions[0]).numpy()
-            # using teacher forcing
-            dec_input = tf.expand_dims(targ[:, t], 1)
+            if self.use_beam_search:
+                # Run the encoder and extract the outputs and final state
+                predictions, _ = self.decoder(dec_input, dec_hidden)
+                _dec_hidden = tf.reshape(enc_hidden[0], [1, self.enc_units])
+                labels = []
+                for idx in range(self.batch_sz):
+                    dec_input_sub = tf.reshape(dec_input[idx], [1, 1])
+                    best_beam = bs.beam_search(dec_input_sub, _dec_hidden)
+                    labels.append(best_beam.tokens[1])
+                predicted_id = labels[0]
+                labels = tf.convert_to_tensor(labels)
+                loss += self.loss_function(labels, predictions)
+                dec_input = tf.expand_dims(labels, 1)
+            else:
+                # Teacher forcing - feeding the target as the next input
+                predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
+                dec_input = tf.expand_dims(targ[:, t], 1)
+                predicted_id = tf.argmax(predictions[0]).numpy()
+                loss += self.loss_function(targ[:, t], predictions)
+                dec_input = tf.expand_dims(targ[:, t], 1)
             if self.display_result and self.targ_lang.idx2word[predicted_id] == END_TAG:
                 print("result: ", result)
             if self.targ_lang.idx2word[predicted_id] == END_TAG:
                 return loss
             result += ' ' + self.targ_lang.idx2word[predicted_id]
+            print(result)
         return loss
-
-    """
-    def run_epsiode(self, init_state):
-        # Encode FULL state using instance of encoder
-        # Then decode by manually looping
-        # Simultanously generating samples from policy (Monte-Carlo)
-        
-        loss = 0
-        enc_output, enc_hidden = self.encoder(init_state, self.hidden)
-        dec_hidden = enc_hidden
-        
-        outputs = []
-        curr_w = tf.expand_dims(
-            [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
-            
-        while curr_w != tf.expand_dims([self.targ_lang.word2idx[END_TAG]] * self.batch_sz, 1):  
-            # EOS depends on granularity of responses (i.e. token, utterance, ...), like START. TODO: determine length of responses (episodes)
-            
-            w_probs, dec_hidden = decoder(curr_w, dec_hidden)
-            w_probs = softmax(w_probs) # TODO: check if softmax is necessary
-            dist = tf.distributions.Categorical(w_probs)
-            curr_w = dist.sample()
-            outputs.append(curr_w)
-            
-        return outputs[]
-    """
 
 
 def evaluate(model: Seq2Seq, eval_dataset):
@@ -251,3 +254,5 @@ def train(model: Seq2Seq, optimizer, train_dataset):
                     batch, total_loss.numpy()))
 
     return total_loss
+
+
