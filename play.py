@@ -208,7 +208,7 @@ def main():
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
 
-        if episode % 5 == 0:
+        if episode % 20 == 0:
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
