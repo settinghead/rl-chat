@@ -6,7 +6,7 @@ from itertools import takewhile
 import random
 from difflib import SequenceMatcher
 
-CONVO_LEN = 16
+CONVO_LEN = 32
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
 BEGIN_TAG = "▶"
@@ -46,8 +46,8 @@ class Environment:
         self.history.append(action)
 
         state = random.sample(self._questions, 1)[0]
-        # state = "hello"
-        state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
+        # state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
+        state = "hellozzz"
         state = ''.join(state)
         state = f'{BEGIN_TAG}{state}{END_TAG}'
 
