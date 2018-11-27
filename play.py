@@ -185,7 +185,7 @@ def main():
                     dist = tf.distributions.Categorical(probs=w_probs_b)
                     loss_bl += - \
                         tf.math.multiply(delta_b, bl_val_b)
-                    cost_b = tf.math.multiply(
+                    cost_b = -tf.math.multiply(
                         tf.transpose(dist.log_prob(
                             tf.transpose(curr_w_idx_b))), delta_b
                     )
@@ -216,7 +216,7 @@ def main():
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
-            good_rewards = [(s, a, r) for s, a, r in batch if r > 0]
+            good_rewards = [(s, a, r) for s, a, r in batch]
             for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
                 print("prev_state: ", s)
                 print("action: ", a)
