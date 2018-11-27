@@ -6,7 +6,7 @@ import tensorflow as tf
 #import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
-from encoder_decoder import Encoder, Decoder, initialize_hidden_state
+from encoder_decoder import Encoder, Decoder
 from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 from agent import Baseline
 import data
@@ -31,6 +31,10 @@ MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
 
 
+def initialize_hidden_state(batch_sz, num_enc_units):
+    return tf.zeros((batch_sz, num_enc_units))
+
+
 def main():
     tf.enable_eager_execution()
 
@@ -49,12 +53,12 @@ def main():
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
                       batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
 
-    # baseline = Baseline(UNITS)
+    baseline = Baseline(UNITS)
 
     history = []
 
     l_optimizer = tf.train.AdamOptimizer()
-    # bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    bl_optimizer = tf.train.RMSPropOptimizer(0.01)
 
     for episode in range(EPISODES):
 
@@ -149,7 +153,7 @@ def main():
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
             loss = 0
-            # loss_bl = 0
+            loss_bl = 0
 
             with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
@@ -170,25 +174,25 @@ def main():
                 )
                 for t in range(max_sentence_len):
 
-                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                    bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
-                    # delta_b = ret_b - bl_val_b
+                    delta_b = ret_b - bl_val_b
 
                     w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
                     curr_w_idx_b = action_encs_b[:, t]
                     dist = tf.distributions.Categorical(probs=w_probs_b)
-                    # loss_bl += - \
-                    #     tf.math.multiply(delta_b, bl_val_b)
-                    # loss += tf.math.multiply(
-                    #     tf.transpose(dist.log_prob(
-                    #         tf.transpose(curr_w_idx_b))), delta_b
-                    # )
-                    cost_b = -tf.math.multiply(
+                    loss_bl += - \
+                        tf.math.multiply(delta_b, bl_val_b)
+                    cost_b = tf.math.multiply(
                         tf.transpose(dist.log_prob(
-                            tf.transpose(curr_w_idx_b))), ret_b
+                            tf.transpose(curr_w_idx_b))), delta_b
                     )
+                    # cost_b = -tf.math.multiply(
+                    #     tf.transpose(dist.log_prob(
+                    #         tf.transpose(curr_w_idx_b))), ret_b
+                    # )
                     # print(cost_b.shape)
                     loss += cost_b
 
@@ -199,11 +203,11 @@ def main():
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
 
-            # grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
+            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
 
             # finally, apply gradient
             l_optimizer.apply_gradients(zip(grads, model_vars))
-            # bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
+            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
