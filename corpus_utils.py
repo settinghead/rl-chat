@@ -38,6 +38,8 @@ class LanguageIndex():
         self.word2idx[self.empty_token] = EMPTY_IDX
         self.word2idx[self._unknown_token] = UNKNOWN_IDX
         prefix = [EMPTY_IDX, UNKNOWN_IDX]
+        for idx, w in enumerate(prefix):
+            self.idx2word[idx] = w
         for index, word in enumerate(sorted_vocab):
             self.word2idx[word] = len(prefix) + index
 
