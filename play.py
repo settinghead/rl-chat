@@ -1,11 +1,12 @@
-#import pudb
+# import pudb
 
 # pudb.set_trace()
 
 import tensorflow as tf
-#import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
+# from encoder_decoder_simple import get_decoder, get_encoder
 from encoder_decoder import Encoder, Decoder
 from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 from agent import Baseline
@@ -16,7 +17,7 @@ import random
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000000
-BATCH_SIZE = 1
+BATCH_SIZE = 32
 # MODEL_BATCH_SIZE = 1
 GAMMA = 1  # TODO
 USE_GLOVE = False
@@ -25,7 +26,7 @@ if USE_GLOVE:
     EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 16
+    EMBEDDING_DIM = 32
 
 MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
@@ -48,17 +49,18 @@ def main():
     vocab_inp_size = len(env.lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
 
-    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM, UNITS,
-                      batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, inp_lang=env.lang.vocab)
-    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM, UNITS,
-                      batch_sz=BATCH_SIZE, use_GloVe=USE_GLOVE, targ_lang=targ_lang.vocab)
+    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
+                      UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
+    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
+                      UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
 
-    baseline = Baseline(UNITS)
+    # baseline = Baseline(UNITS)
 
     history = []
 
     l_optimizer = tf.train.AdamOptimizer()
-    bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    # bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    batch = None
 
     for episode in range(EPISODES):
 
@@ -84,21 +86,23 @@ def main():
                 [targ_lang.word2idx[w]], 0
             )
 
-            outputs = [w]
+            outputs = []
+            actions = []
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
-                w_probs, dec_hidden = decoder(curr_w_enc, dec_hidden)
-                w_dist = tf.distributions.Categorical(w_probs[0])
-                w_idx = w_dist.sample(1).numpy()[0]
+                w_logits, dec_hidden = decoder(curr_w_enc, dec_hidden)
+                w_dist = tf.distributions.Categorical(logits=w_logits[0])
+                w_idx = w_dist.sample(1)
+                actions.append(w_idx)
                 # w_idx = tf.argmax(w_probs[0]).numpy()
-                w = targ_lang.idx2word[w_idx]
+                w = targ_lang.idx2word[w_idx.numpy()[0]]
                 curr_w_enc = tf.expand_dims(
                     [targ_lang.word2idx[w]] * 1, 1)
                 outputs.append(w)
-            # action is a sentence (string)
-            action = ''.join(outputs)
 
-            next_state, reward, done = env.step(action)
-            history.append((state, action, reward))
+            # action is a sentence (string)
+            action_str = ''.join(outputs)
+            next_state, reward, done = env.step(action_str)
+            history.append((state, actions, action_str, reward))
             state = next_state
 
             # record history (to be used for gradient updating after the episode is done)
@@ -116,14 +120,14 @@ def main():
                 return [env.lang.word2idx[token]
                         for token in char_tokenizer(sentence)]
 
-            def action_to_encs(action: str):
-                begin_w = tf.expand_dims(
-                    [targ_lang.word2idx[BEGIN_TAG]], 1)
-                enc = [begin_w] + [
-                    tf.expand_dims([targ_lang.word2idx[token]], 1)
-                    for token in char_tokenizer(action)
-                ]
-                return enc
+            # def action_to_encs(action: str):
+            #     begin_w = tf.expand_dims(
+            #         [targ_lang.word2idx[BEGIN_TAG]], 1)
+            #     enc = [begin_w] + [
+            #         tf.expand_dims([targ_lang.word2idx[token]], 1)
+            #         for token in char_tokenizer(action)
+            #     ]
+            #     return enc
 
             def maybe_pad_sentence(s):
                 return tf.keras.preprocessing.sequence.pad_sequences(
@@ -135,25 +139,25 @@ def main():
             state_inp_b, action_encs_b, reward_b, ret_seq_b = zip(*[
                 [
                     sentence_to_idxs(state),
-                    action_to_encs(action),
+                    actions_enc_b,
                     reward,
                     get_returns(reward, MAX_TARGET_LEN)
                 ]
-                for state, action, reward in batch
+                for state, actions_enc_b, _, reward in batch
             ])
-
+            action_encs_b = list(action_encs_b)
             action_encs_b = maybe_pad_sentence(action_encs_b)
             action_encs_b = tf.expand_dims(
                 tf.convert_to_tensor(action_encs_b), -1)
 
-            # ret_mean = np.mean(ret_seq_b)
-            # ret_std = np.std(ret_seq_b)
-            # ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            ret_mean = np.mean(ret_seq_b)
+            ret_std = np.std(ret_seq_b)
+            ret_seq_b = (ret_seq_b - ret_mean) / ret_std
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
             loss = 0
-            loss_bl = 0
+            # loss_bl = 0
 
             with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
@@ -174,25 +178,26 @@ def main():
                 )
                 for t in range(max_sentence_len):
 
-                    bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
-                    delta_b = ret_b - bl_val_b
-
-                    w_probs_b, dec_hidden_b = decoder(
+                    # delta_b = ret_b - bl_val_b
+                    # print(prev_w_idx_b.shape)
+                    w_logits_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
                     curr_w_idx_b = action_encs_b[:, t]
-                    dist = tf.distributions.Categorical(probs=w_probs_b)
-                    loss_bl += - \
-                        tf.math.multiply(delta_b, bl_val_b)
-                    cost_b = -tf.math.multiply(
-                        tf.transpose(dist.log_prob(
-                            tf.transpose(curr_w_idx_b))), delta_b
-                    )
+                    # w_probs_b = tf.nn.softmax(w_logits_b)
+                    dist = tf.distributions.Categorical(logits=w_logits_b)
+                    # loss_bl += - \
+                    #     tf.math.multiply(delta_b, bl_val_b)
                     # cost_b = -tf.math.multiply(
                     #     tf.transpose(dist.log_prob(
-                    #         tf.transpose(curr_w_idx_b))), ret_b
+                    #         tf.transpose(curr_w_idx_b))), delta_b
                     # )
+                    cost_b = -tf.math.multiply(
+                        tf.transpose(dist.log_prob(
+                            tf.transpose(curr_w_idx_b))), ret_b
+                    )
                     # print(cost_b.shape)
                     loss += cost_b
 
@@ -203,26 +208,25 @@ def main():
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
 
-            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
+            # grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
 
             # finally, apply gradient
             l_optimizer.apply_gradients(zip(grads, model_vars))
-            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
+            # bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
 
-        if episode % 20 == 0:
+        if episode % 20 == 0 and batch != None:
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
-            good_rewards = [(s, a, r) for s, a, r in batch]
+            good_rewards = [(s, a_str, r) for s, _, a_str, r in batch]
             for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
                 print("prev_state: ", s)
                 print("action: ", a)
                 print("reward: ", r)
                 # print("return: ", get_returns(r, MAX_TARGET_LEN))
-            print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
             print(
                 "all returns: min=%f, max=%f, median=%f" %
                 (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
@@ -230,6 +234,7 @@ def main():
             print("avg reward: ", sum(reward_b) / len(reward_b))
             print("avg loss: ", tf.reduce_mean(loss).numpy())
             print("avg grad: ", np.mean(grads[1].numpy()))
+            # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
 
 main()

@@ -7,6 +7,7 @@ from embedding_utils import get_GloVe_embeddings
 from data import BEGIN_TAG, END_TAG
 import beam_search
 
+
 def gru(units):
     if tf.test.is_gpu_available():
         return tf.keras.layers.CuDNNGRU(units,
@@ -115,6 +116,7 @@ class Decoder(tf.keras.Model):
                 vocab_size, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
+        self.gru2 = gru(self.dec_units)
         if use_bilstm:
             self.bilstm = bilstm(self.dec_units)
         self.fc = tf.keras.layers.Dense(vocab_size)
@@ -129,9 +131,11 @@ class Decoder(tf.keras.Model):
             state = [state_h, state_c]
         else:
             output, state = self.gru(x, initial_state=hidden)
+            output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
         x = tf.reshape(x, [x.shape[0], self.vocab_size])
-        predicts = tf.nn.softmax(x)
+        # predicts = tf.nn.softmax(x)
+        predicts = x
         return predicts, state
 
 
@@ -148,7 +152,7 @@ class Seq2Seq(tf.keras.Model):
         max_length_tar,
         use_GloVe=False,
         display_result=False,
-        beam_size = 7,
+        beam_size=7,
         use_beam_search=False
     ):
 
@@ -162,18 +166,17 @@ class Seq2Seq(tf.keras.Model):
         self.encoder = Encoder(vocab_inp_size, embedding_dim,
                                enc_units, batch_sz, use_GloVe, inp_lang.vocab)
         self.decoder = Decoder(vocab_tar_size, embedding_dim,
-                        enc_units, batch_sz, use_GloVe, targ_lang.vocab)
+                               enc_units, batch_sz, use_GloVe, targ_lang.vocab)
         self.hidden = tf.zeros((batch_sz, enc_units))
         self.max_length_tar = max_length_tar
         self.display_result = display_result
         self.use_beam_search = use_beam_search
         self.beam_size = beam_size
         self.beam_search_decoder = Decoder(vocab_tar_size, embedding_dim,
-                        enc_units, 1, use_GloVe, targ_lang.vocab)
-            
+                                           enc_units, 1, use_GloVe, targ_lang.vocab)
 
     def loss_function(self, real, pred):
-        #if it's PAD, loss is 0
+        # if it's PAD, loss is 0
         mask = 1 - np.equal(real, 0)
         loss_ = tf.nn.sparse_softmax_cross_entropy_with_logits(
             labels=real, logits=pred) * mask
@@ -184,16 +187,16 @@ class Seq2Seq(tf.keras.Model):
         enc_hidden = self.encoder(inp, self.hidden)
         dec_hidden = enc_hidden
         dec_input = tf.expand_dims(
-                    [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
+            [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
         result = ''
         if self.use_beam_search:
             bs = beam_search.BeamSearch(self.beam_size,
-                    self.targ_lang.word2idx[BEGIN_TAG],
-                    self.targ_lang.word2idx[END_TAG],
-                    self.targ_lang,
-                    self.max_length_tar,
-                    self.batch_sz,
-                    self.beam_search_decoder)
+                                        self.targ_lang.word2idx[BEGIN_TAG],
+                                        self.targ_lang.word2idx[END_TAG],
+                                        self.targ_lang,
+                                        self.max_length_tar,
+                                        self.batch_sz,
+                                        self.beam_search_decoder)
         for t in range(1, targ.shape[1]):
             if self.use_beam_search:
                 # Run the encoder and extract the outputs and final state
@@ -254,5 +257,3 @@ def train(model: Seq2Seq, optimizer, train_dataset):
                     batch, total_loss.numpy()))
 
     return total_loss
-
-

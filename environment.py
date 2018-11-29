@@ -61,6 +61,7 @@ class Environment:
 
     def calc_reward(self, utterance1: str, utterance2: str):
         # calc string distance
+
         seq1 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
             self.lang.word2idx[t] for t in
             char_tokenizer(utterance1)[1:]]))
