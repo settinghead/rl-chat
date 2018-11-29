@@ -26,7 +26,7 @@ if USE_GLOVE:
     EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 32
+    EMBEDDING_DIM = 16
 
 MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
@@ -58,8 +58,9 @@ def main():
 
     history = []
 
+    # l_optimizer = tf.train.RMSPropOptimizer(0.001)
     l_optimizer = tf.train.AdamOptimizer()
-    # bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    # bl_optimizer = tf.train.RMSPropOptimizer(0.001)
     batch = None
 
     for episode in range(EPISODES):
@@ -178,10 +179,11 @@ def main():
                 )
                 for t in range(max_sentence_len):
 
-                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+
+                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
                     # delta_b = ret_b - bl_val_b
-                    # print(prev_w_idx_b.shape)
+
                     w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
