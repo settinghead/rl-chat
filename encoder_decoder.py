@@ -134,8 +134,8 @@ class Decoder(tf.keras.Model):
             output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
         x = tf.reshape(x, [x.shape[0], self.vocab_size])
-        # predicts = tf.nn.softmax(x)
-        predicts = x
+        # predicts = x
+        predicts = tf.nn.softmax(x)
         return predicts, state
 
 

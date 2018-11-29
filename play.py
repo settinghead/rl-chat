@@ -89,8 +89,8 @@ def main():
             outputs = []
             actions = []
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
-                w_logits, dec_hidden = decoder(curr_w_enc, dec_hidden)
-                w_dist = tf.distributions.Categorical(logits=w_logits[0])
+                w_probs_b, dec_hidden = decoder(curr_w_enc, dec_hidden)
+                w_dist = tf.distributions.Categorical(probs=w_probs_b[0])
                 w_idx = w_dist.sample(1)
                 actions.append(w_idx)
                 # w_idx = tf.argmax(w_probs[0]).numpy()
@@ -182,12 +182,12 @@ def main():
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
                     # delta_b = ret_b - bl_val_b
                     # print(prev_w_idx_b.shape)
-                    w_logits_b, dec_hidden_b = decoder(
+                    w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
                     curr_w_idx_b = action_encs_b[:, t]
                     # w_probs_b = tf.nn.softmax(w_logits_b)
-                    dist = tf.distributions.Categorical(logits=w_logits_b)
+                    dist = tf.distributions.Categorical(probs=w_probs_b)
                     # loss_bl += - \
                     #     tf.math.multiply(delta_b, bl_val_b)
                     # cost_b = -tf.math.multiply(
