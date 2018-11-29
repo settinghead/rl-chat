@@ -1,32 +1,31 @@
 import tensorflow as tf
 class Hypothesis(object):
     """Defines a hypothesis during beam search."""
-    def __init__(self, tokens, prob, state):
+    def __init__(self, tokens, log_prob, state):
         """Hypothesis constructor.
         Args:
         tokens: start tokens for decoding.
-        prob: prob of the start tokens, usually 1.
+        log_prob: log prob of the start tokens, usually 1.
         state: decoder initial states.
         """
         self.tokens = tokens
-        self.prob = prob
-        self.log_prob = tf.log(prob)
+        self.log_prob = log_prob
         self.state = state
 
     @property
     def latest_token(self):
         return self.tokens[-1]
 
-    def Extend(self, token, prob, new_state):
+    def Extend(self, token, log_prob, new_state):
         """Extend the hypothesis with result from latest step.
         Args:
         token: latest token from decoding.
-        prob: prob of the latest decoded tokens.
+        log_prob: log prob of the latest decoded tokens.
         new_state: decoder output state. Fed to the decoder for next step.
         Returns:
         New Hypothesis with the results from latest step.
         """
-        return Hypothesis(self.tokens + [token], self.prob + prob, new_state)
+        return Hypothesis(self.tokens + [token], self.log_prob + log_prob, new_state)
 
 class BeamSearch(object):
     def __init__(self,
@@ -47,9 +46,9 @@ class BeamSearch(object):
         self.decoder = decoder
         self.decoder = decoder
 
-    def beam_search(self, dec_input, enc_init_state):
+    def beam_search(self, start_token, dec_input, enc_init_state):
         # Replicate the initial states K times for the first step.
-        hyps = [Hypothesis([self.start_token], 0.0, enc_init_state)]
+        hyps = [Hypothesis([start_token], 0.0, enc_init_state)] * self.beam_size
         results = []
         steps = 0
         while steps < self.max_steps and len(results) < self.beam_size:
@@ -61,7 +60,7 @@ class BeamSearch(object):
             for idx in range(len(latest_tokens)):
                 dec_input = tf.expand_dims([latest_tokens[idx]], 1)
                 new_predicts, new_state = self.decoder(dec_input, states[idx])
-                _topk_probs, _topk_ids = tf.nn.top_k(new_predicts, self.beam_size)
+                _topk_probs, _topk_ids = tf.nn.top_k(tf.log(new_predicts), self.beam_size)
                 topk_probs.append(_topk_probs.numpy().flatten())
                 topk_ids.append(_topk_ids.numpy().flatten())
                 new_states.append(new_state)
@@ -71,11 +70,8 @@ class BeamSearch(object):
             num_beam_source = 1 if steps == 0 else len(hyps)
             all_hyps = []
             for i in range(num_beam_source):
-                #print("i",i)
                 h, ns = hyps[i], new_states[i]
-                #print("h",h)
                 for j in range(self.beam_size):
-                    #print("j",j)
                     all_hyps.append(h.Extend(topk_ids[i][j], topk_probs[i][j], ns))
 
             # Filter and collect any hypotheses that have the end token.
@@ -87,9 +83,8 @@ class BeamSearch(object):
                 else:
                     # Otherwise continue to the extend the hypothesis.
                     hyps.append(h)
-                    if len(hyps) == self.beam_size or len(results) == self.beam_size:
-                        break
-
+                if (len(hyps) == self.beam_size or len(results) == self.beam_size):
+                    break
             steps += 1
 
         if steps == self.max_steps:

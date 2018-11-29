@@ -152,7 +152,7 @@ class Seq2Seq(tf.keras.Model):
         max_length_tar,
         use_GloVe=False,
         display_result=False,
-        beam_size=7,
+        beam_size=3,
         use_beam_search=False
     ):
 
@@ -191,25 +191,27 @@ class Seq2Seq(tf.keras.Model):
         result = ''
         if self.use_beam_search:
             bs = beam_search.BeamSearch(self.beam_size,
-                                        self.targ_lang.word2idx[BEGIN_TAG],
-                                        self.targ_lang.word2idx[END_TAG],
-                                        self.targ_lang,
-                                        self.max_length_tar,
-                                        self.batch_sz,
-                                        self.beam_search_decoder)
+
+                    self.targ_lang.word2idx[BEGIN_TAG],
+                    self.targ_lang.word2idx[END_TAG],
+                    self.targ_lang,
+                    self.max_length_tar,
+                    self.batch_sz,
+                    self.beam_search_decoder)
+        labels = []
         for t in range(1, targ.shape[1]):
             if self.use_beam_search:
                 # Run the encoder and extract the outputs and final state
                 predictions, _ = self.decoder(dec_input, dec_hidden)
-                _dec_hidden = tf.reshape(enc_hidden[0], [1, self.enc_units])
+                start_tokens = labels if len(labels) > 0 else  [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz
                 labels = []
                 for idx in range(self.batch_sz):
+                    _dec_hidden = tf.reshape(dec_hidden[idx], [1, self.enc_units])
                     dec_input_sub = tf.reshape(dec_input[idx], [1, 1])
-                    best_beam = bs.beam_search(dec_input_sub, _dec_hidden)
+                    best_beam = bs.beam_search(start_tokens[idx], dec_input_sub, _dec_hidden)
                     labels.append(best_beam.tokens[1])
                 predicted_id = labels[0]
-                labels = tf.convert_to_tensor(labels)
-                loss += self.loss_function(labels, predictions)
+                loss += self.loss_function(tf.convert_to_tensor(labels), predictions)
                 dec_input = tf.expand_dims(labels, 1)
             else:
                 # Teacher forcing - feeding the target as the next input
@@ -217,13 +219,13 @@ class Seq2Seq(tf.keras.Model):
                 dec_input = tf.expand_dims(targ[:, t], 1)
                 predicted_id = tf.argmax(predictions[0]).numpy()
                 loss += self.loss_function(targ[:, t], predictions)
-                dec_input = tf.expand_dims(targ[:, t], 1)
+                
             if self.display_result and self.targ_lang.idx2word[predicted_id] == END_TAG:
                 print("result: ", result)
             if self.targ_lang.idx2word[predicted_id] == END_TAG:
                 return loss
             result += ' ' + self.targ_lang.idx2word[predicted_id]
-            print(result)
+            #print(result)
         return loss
 
 
