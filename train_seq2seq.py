@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     EMBEDDING_DIM = get_embedding_dim(USE_GLOVE)
 
-    units = 512
+    units = 128
 
     print("Vocab size: ", len(inp_lang.vocab), len(targ_lang.vocab))
 
