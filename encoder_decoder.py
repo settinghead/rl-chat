@@ -201,10 +201,10 @@ class Seq2Seq(tf.keras.Model):
             if self.use_beam_search:
                 predictions, _ = self.decoder(dec_input, dec_hidden)
                 best_beam = bs.beam_search(dec_input, dec_hidden)
-                print(len(best_beam.tokens))
-                labels = best_beam.tokens[1,:]
+                #labels = best_beam.tokens[1,:]
                 dec_input = tf.expand_dims(labels, 1)
-                loss += self.loss_function(tf.convert_to_tensor(labels), predictions)
+                loss += tf.reduce_mean(best_beam.log_prob)
+                #loss += self.loss_function(tf.convert_to_tensor(labels), predictions)
             else:
                 # Teacher forcing - feeding the target as the next input
                 predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
