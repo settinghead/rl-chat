@@ -44,26 +44,20 @@ class BeamSearch(object):
         self.batch_size = batch_size
         self.max_steps = max_steps
         self.decoder = decoder
-        self.decoder = decoder
 
-    def beam_search(self, start_token, dec_input, enc_init_state):
+    def beam_search(self, dec_input, enc_states):
         # Replicate the initial states K times for the first step.
-        hyps = [Hypothesis([start_token], 0.0, enc_init_state)] * self.beam_size
+        hyps = [Hypothesis([self.start_token], 0.0, enc_states)] * self.beam_size
         results = []
         steps = 0
         while steps < self.max_steps and len(results) < self.beam_size:
             latest_tokens = [h.latest_token for h in hyps]
-            states = [h.state for h in hyps]
-            new_states = []
-            topk_probs = []
-            topk_ids = []
-            for idx in range(len(latest_tokens)):
-                dec_input = tf.expand_dims([latest_tokens[idx]], 1)
-                new_predicts, new_state = self.decoder(dec_input, states[idx])
-                _topk_probs, _topk_ids = tf.nn.top_k(tf.log(new_predicts), self.beam_size)
-                topk_probs.append(_topk_probs.numpy().flatten())
-                topk_ids.append(_topk_ids.numpy().flatten())
-                new_states.append(new_state)
+            if steps > 0:
+                dec_input = tf.expand_dims(latest_tokens, 1)
+                enc_states = [h.state for h in hyps]
+            predictions, new_states = self.decoder(dec_input, tf.convert_to_tensor(enc_states))
+            topk_probs, topk_ids = tf.nn.top_k(tf.log(predictions), self.beam_size * 2)
+
             # Extend each hypothesis.
             # The first step takes the best K results from first hyps. Following
             # steps take the best K results from K*K hyps.
@@ -71,8 +65,8 @@ class BeamSearch(object):
             all_hyps = []
             for i in range(num_beam_source):
                 h, ns = hyps[i], new_states[i]
-                for j in range(self.beam_size):
-                    all_hyps.append(h.Extend(topk_ids[i][j], topk_probs[i][j], ns))
+                for j in range(self.beam_size * 2):
+                    all_hyps.append(h.Extend(topk_ids[i, j], topk_probs[i, j], ns))
 
             # Filter and collect any hypotheses that have the end token.
             hyps = []
