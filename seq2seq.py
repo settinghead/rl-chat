@@ -1,5 +1,4 @@
 import tensorflow as tf
-#import matplotlib.pyplot as plt
 import numpy as np
 import time
 import utils
@@ -82,14 +81,7 @@ class Encoder(tf.keras.Model):
 
     def call(self, x, hidden):
         x = self.embedding(x)
-        if self.use_bilstm:
-            _, forward_h, forward_c, backward_h, backward_c = self.bilstm(
-                x, initial_state=hidden)
-            state_h = tf.keras.layers.Concatenate([forward_h, backward_h])
-            state_c = tf.keras.layers.Concatenate([forward_c, backward_c])
-            state = [state_h, state_c]
-        else:
-            _, state = self.gru(x, initial_state=hidden)
+        _, state = self.gru(x, initial_state=hidden)
         return state
 
 
@@ -116,28 +108,18 @@ class Decoder(tf.keras.Model):
                 vocab_size, embedding_dim)
         self.use_bilstm = use_bilstm
         self.gru = gru(self.dec_units)
-        self.gru2 = gru(self.dec_units)
-        if use_bilstm:
-            self.bilstm = bilstm(self.dec_units)
         self.fc = tf.keras.layers.Dense(vocab_size)
 
     def call(self, x, hidden):
         x = self.embedding(x)
-        if self.use_bilstm:
-            output, forward_h, forward_c, backward_h, backward_c = self.bilstm(
-                x, initial_state=hidden)
-            state_h = tf.keras.layers.Concatenate([forward_h, backward_h])
-            state_c = tf.keras.layers.Concatenate([forward_c, backward_c])
-            state = [state_h, state_c]
-        else:
-            output, state = self.gru(x, initial_state=hidden)
-            output, state = self.gru(x, initial_state=hidden)
+        output, state = self.gru(x, initial_state=hidden)
         x = self.fc(output)
-        x = tf.reshape(x, [x.shape[0], self.vocab_size])
-        # predicts = x
         predicts = tf.nn.softmax(x)
         return predicts, state
 
+TEACHER_FORCING = "TF"
+BASIC = "B"
+BEAM_SEARCH = "BS"
 
 class Seq2Seq(tf.keras.Model):
     def __init__(
@@ -151,9 +133,7 @@ class Seq2Seq(tf.keras.Model):
         targ_lang,
         max_length_tar,
         use_GloVe=False,
-        display_result=False,
-        beam_size=3,
-        use_beam_search=False
+        mode=BASIC
     ):
 
         super(Seq2Seq, self).__init__()
@@ -169,9 +149,7 @@ class Seq2Seq(tf.keras.Model):
                                enc_units, batch_sz, use_GloVe, targ_lang.vocab)
         self.hidden = tf.zeros((batch_sz, enc_units))
         self.max_length_tar = max_length_tar
-        self.display_result = display_result
-        self.use_beam_search = use_beam_search
-        self.beam_size = beam_size
+        self.mode = mode
 
     def loss_function(self, real, pred):
         # if it's PAD, loss is 0
@@ -184,10 +162,10 @@ class Seq2Seq(tf.keras.Model):
         loss = 0
         enc_hidden = self.encoder(inp, self.hidden)
         dec_hidden = enc_hidden
-        dec_input = tf.expand_dims(
-            [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
-        result = ''
-        if self.use_beam_search:
+
+
+        if self.mode == BEAM_SEARCH:
+
             bs = beam_search.BeamSearch(self.beam_size,
                     self.targ_lang.word2idx[BEGIN_TAG],
                     self.targ_lang.word2idx[END_TAG],
@@ -195,27 +173,32 @@ class Seq2Seq(tf.keras.Model):
                     self.max_length_tar,
                     self.batch_sz,
                     self.decoder)
+            best_beam = bs.beam_search(targ, dec_hidden)
+            loss += best_beam.log_prob
+            return loss
 
-        for t in range(1, targ.shape[1]):
-            if self.use_beam_search:
-                predictions, _ = self.decoder(dec_input, dec_hidden)
-                best_beam = bs.beam_search(dec_input, dec_hidden)
-                loss += tf.reduce_mean(best_beam.log_prob)
-                predicted_id = tf.argmax(predictions[0]).numpy()
-            else:
+        if self.mode == BASIC:
+
+            dec_input = tf.expand_dims(
+                    [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
+            for t in range(1, targ.shape[1]):
+                predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
+                predictions = tf.squeeze(predictions, axis=1)
+                dec_input = tf.reshape(tf.argmax(predictions, axis=1), (self.batch_sz, 1))
+                loss += self.loss_function(targ[:, t], predictions)
+            return loss
+
+        elif self.mode == TEACHER_FORCING:
+
+            dec_input = tf.expand_dims(
+                    [self.targ_lang.word2idx[BEGIN_TAG]] * self.batch_sz, 1)
+            for t in range(1, targ.shape[1]):
                 # Teacher forcing - feeding the target as the next input
                 predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
-                predicted_id = tf.argmax(predictions[0]).numpy()
+                dec_input = tf.expand_dims(targ[:, t], 1)
+                predictions = tf.squeeze(predictions, axis=1)
                 loss += self.loss_function(targ[:, t], predictions)
-            dec_input = tf.expand_dims(targ[:, t], 1)
-            if self.display_result and self.targ_lang.idx2word[predicted_id] == END_TAG:
-                print("result: ", result)
-            if self.targ_lang.idx2word[predicted_id] == END_TAG:
-                return loss
-            result += ' ' + self.targ_lang.idx2word[predicted_id]
-            #print(result)
-        return loss
-
+            return loss
 
 def evaluate(model: Seq2Seq, eval_dataset):
     """evaluate an epoch."""
@@ -227,7 +210,19 @@ def evaluate(model: Seq2Seq, eval_dataset):
         total_loss += batch_loss
         if batch % 100 == 0:
             print('batch {} eval loss {:.4f}'.format(batch, total_loss.numpy()))
-
+            enc_hidden = model.encoder(inp, model.hidden)
+            dec_hidden = enc_hidden
+            dec_input = tf.expand_dims(
+                [model.targ_lang.word2idx[BEGIN_TAG]] * model.batch_sz , 1)
+            result = ""
+            for t in range(model.max_length_tar):
+                predictions, dec_hidden = model.decoder(dec_input, dec_hidden)
+                predictions = tf.squeeze(predictions, axis=1)
+                predicted_id = np.argmax(predictions[0])
+                result += model.targ_lang.idx2word[predicted_id] + ' '
+                if model.targ_lang.idx2word[predicted_id] == END_TAG:
+                    print("result: ", result.replace(END_TAG, ""))
+                dec_input = tf.expand_dims([predicted_id] * model.batch_sz, 1)
     return total_loss
 
 
