@@ -164,7 +164,7 @@ class Seq2Seq(tf.keras.Model):
         dec_hidden = enc_hidden
 
 
-        if self.mode = BEAM_SEARCH:
+        if self.mode == BEAM_SEARCH:
 
             bs = beam_search.BeamSearch(self.beam_size,
                     self.targ_lang.word2idx[BEGIN_TAG],
