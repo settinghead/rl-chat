@@ -145,8 +145,8 @@ class Seq2Seq(tf.keras.Model):
         max_length_tar,
         use_GloVe=False,
         mode=BEAM_SEARCH,
-        use_bilstm = True,
-        beam_size = 1
+        use_bilstm = False,
+        beam_size = 2
     ):
 
         super(Seq2Seq, self).__init__()
@@ -164,6 +164,7 @@ class Seq2Seq(tf.keras.Model):
         self.max_length_tar = max_length_tar
         self.mode = mode
         self.beam_size = beam_size
+        self.use_bilstm = use_bilstm
         self.bs = beam_search.BeamSearch(self.beam_size,
                                         self.targ_lang.word2idx[BEGIN_TAG],
                                         self.targ_lang.word2idx[END_TAG],
@@ -195,9 +196,15 @@ class Seq2Seq(tf.keras.Model):
                 labels = []
                 for i in range(self.batch_sz):
                     new_input = tf.reshape(dec_input[i], (1, 1))
-                    print(dec_hidden_copy[i].shape)
-                    new_dec_hidden = tf.reshape(dec_hidden_copy[i], (1, self.enc_units))
-                    best_beam = self.bs.beam_search(new_input, new_dec_hidden)
+                    if self.use_bilstm:
+                        new_dec_hidden = [
+                            tf.reshape(dec_hidden_copy[0][i], (1, self.enc_units)),
+                            tf.reshape(dec_hidden_copy[1][i], (1, self.enc_units))]
+                        best_beam = self.bs.beam_search(new_input, new_dec_hidden, lstm=True)
+                    else:
+                        new_dec_hidden = tf.reshape(dec_hidden_copy[i], (1, self.enc_units))
+                        best_beam = self.bs.beam_search(new_input, new_dec_hidden)
+                        
                     label = best_beam.tokens[1]
                     labels.append(label)
                 dec_input = tf.expand_dims(labels, 1)
@@ -206,6 +213,7 @@ class Seq2Seq(tf.keras.Model):
             return loss
 
         if self.mode == BASIC:
+
             dec_input = tf.expand_dims(
                     [self.targ_lang.word2idx[BEGIN_TAG]]*self.batch_sz, 1)
             for t in range(1, targ.shape[1]):
@@ -249,6 +257,8 @@ def evaluate(model: Seq2Seq, eval_dataset):
                 result += model.targ_lang.idx2word[predicted_id] + ' '
                 if model.targ_lang.idx2word[predicted_id] == END_TAG:
                     print("result: ", result.replace(END_TAG, ""))
+                else:
+                    print(result)
                 dec_input = tf.expand_dims([predicted_id] * model.batch_sz, 1)
     return total_loss
 
