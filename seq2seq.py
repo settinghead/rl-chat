@@ -12,29 +12,31 @@ def gru(units):
         return tf.keras.layers.CuDNNGRU(units,
                                         return_sequences=True,
                                         return_state=True,
+                                        dropout=0.5,
+                                        recurrent_dropout=0.5,
                                         recurrent_initializer='glorot_uniform')
     else:
         return tf.keras.layers.GRU(units,
                                    return_sequences=True,
                                    return_state=True,
-                                   recurrent_activation='sigmoid',
+                                   dropout=0.5,
+                                   recurrent_dropout=0.5,
                                    recurrent_initializer='glorot_uniform')
 
 
 def bilstm(units):
     if tf.test.is_gpu_available():
-        return tf.keras.layers.Bidirectional(tf.keras.layers.CuDNNLSTM(units,
-                                                                       return_sequences=True,
-                                                                       return_state=True,
-                                                                       dropout=0.25,
-                                                                       recurrent_dropout=0.25))
+        return tf.keras.layers.CuDNNLSTM(units,
+                                        return_sequences=True,
+                                        return_state=True,
+                                        dropout=0.5,
+                                        recurrent_dropout=0.5)
     else:
-        return tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(units,
-                                                                  return_sequences=True,
-                                                                  return_state=True,
-                                                                  dropout=0.25,
-                                                                  recurrent_dropout=0.25,
-                                                                  recurrent_activation='sigmoid'))
+        return tf.keras.layers.LSTM(units,
+                                    return_sequences=True,
+                                    return_state=True,
+                                    dropout=0.5,
+                                    recurrent_dropout=0.5)
 
 
 class GloVeEmbedding(tf.keras.Model):
@@ -75,13 +77,13 @@ class Encoder(tf.keras.Model):
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
         self.use_bilstm = use_bilstm
-        self.gru = gru(self.enc_units)
+        self.encode_model = gru(self.enc_units)
         if use_bilstm:
-            self.bilstm = bilstm(self.enc_units)
+            self.encode_model = bilstm(self.enc_units)
 
     def call(self, x, hidden):
         x = self.embedding(x)
-        _, state = self.gru(x, initial_state=hidden)
+        _, state = self.encode_model(x, initial_state=hidden)
         return state
 
 
@@ -106,13 +108,16 @@ class Decoder(tf.keras.Model):
         else:
             self.embedding = tf.keras.layers.Embedding(
                 vocab_size, embedding_dim)
-        self.use_bilstm = use_bilstm
-        self.gru = gru(self.dec_units)
+
+        self.decode_model = gru(self.dec_units)
+        if use_bilstm:
+            self.decode_model = bilstm(self.dec_units)
+
         self.fc = tf.keras.layers.Dense(vocab_size)
 
     def call(self, x, hidden):
         x = self.embedding(x)
-        output, state = self.gru(x, initial_state=hidden)
+        output, state = self.decode_model(x, initial_state=hidden)
         x = self.fc(output)
         predicts = tf.nn.softmax(x)
         return predicts, state
@@ -133,7 +138,8 @@ class Seq2Seq(tf.keras.Model):
         targ_lang,
         max_length_tar,
         use_GloVe=False,
-        mode=BASIC
+        mode=BEAM_SEARCH,
+        beam_size = 1
     ):
 
         super(Seq2Seq, self).__init__()
@@ -144,12 +150,13 @@ class Seq2Seq(tf.keras.Model):
         self.enc_units = enc_units
         self.targ_lang = targ_lang
         self.encoder = Encoder(vocab_inp_size, embedding_dim,
-                               enc_units, batch_sz, use_GloVe, inp_lang.vocab)
+                               enc_units, batch_sz, use_GloVe, inp_lang.vocab, use_bilstm=False)
         self.decoder = Decoder(vocab_tar_size, embedding_dim,
-                               enc_units, batch_sz, use_GloVe, targ_lang.vocab)
+                               enc_units, batch_sz, use_GloVe, targ_lang.vocab, use_bilstm=False)
         self.hidden = tf.zeros((batch_sz, enc_units))
         self.max_length_tar = max_length_tar
         self.mode = mode
+        self.beam_size = beam_size
 
     def loss_function(self, real, pred):
         # if it's PAD, loss is 0
@@ -173,8 +180,21 @@ class Seq2Seq(tf.keras.Model):
                     self.max_length_tar,
                     self.batch_sz,
                     self.decoder)
-            best_beam = bs.beam_search(targ, dec_hidden)
-            loss += best_beam.log_prob
+            dec_input = tf.expand_dims(
+                    [self.targ_lang.word2idx[BEGIN_TAG]]*self.batch_sz, 1)
+            dec_hidden_copy = dec_hidden
+            for t in range(1, targ.shape[1]):
+                predictions, dec_hidden = self.decoder(dec_input, dec_hidden)
+                predictions = tf.squeeze(predictions, axis=1)
+                labels = []
+                for i in range(self.batch_sz):
+                    new_input = tf.reshape(dec_input[i], (1, 1))
+                    new_dec_hidden = tf.reshape(dec_hidden_copy[i], (1, self.enc_units))
+                    best_beam = bs.beam_search(new_input, new_dec_hidden)
+                    label = best_beam.tokens[1]
+                    labels.append(label)
+                dec_input = tf.expand_dims(labels, 1)
+                loss += self.loss_function(tf.convert_to_tensor(labels), predictions)
             return loss
 
         if self.mode == BASIC:

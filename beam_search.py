@@ -56,8 +56,8 @@ class BeamSearch(object):
                 dec_input = tf.expand_dims(latest_tokens, 1)
                 enc_states = [h.state for h in hyps]
             predictions, new_states = self.decoder(dec_input, tf.convert_to_tensor(enc_states))
+            predictions = tf.squeeze(predictions, axis=1)
             topk_probs, topk_ids = tf.nn.top_k(tf.log(predictions), self.beam_size * 2)
-
             # Extend each hypothesis.
             # The first step takes the best K results from first hyps. Following
             # steps take the best K results from K*K hyps.
@@ -65,8 +65,8 @@ class BeamSearch(object):
             all_hyps = []
             for i in range(num_beam_source):
                 h, ns = hyps[i], new_states[i]
-                for j in range(self.beam_size * 2):
-                    all_hyps.append(h.Extend(topk_ids[i, j], topk_probs[i, j], ns))
+                for j in range(self.beam_size * 2): 
+                    all_hyps.append(h.Extend(topk_ids[i, j].numpy(), topk_probs[i, j].numpy(), ns))
 
             # Filter and collect any hypotheses that have the end token.
             hyps = []
