@@ -17,7 +17,7 @@ import random
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000000
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 # MODEL_BATCH_SIZE = 1
 GAMMA = 1  # TODO
 USE_GLOVE = False
@@ -26,14 +26,18 @@ if USE_GLOVE:
     EMBEDDING_DIM = 100
 else:
     # 256 if without pretrained embedding
-    EMBEDDING_DIM = 16
+    EMBEDDING_DIM = 8
 
 MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
 
 
 def initialize_hidden_state(batch_sz, num_enc_units):
-    return tf.zeros((batch_sz, num_enc_units))
+    return (
+        tf.zeros((batch_sz, num_enc_units)),
+        tf.zeros((batch_sz, num_enc_units)),
+        tf.zeros((batch_sz, num_enc_units))
+    )
 
 
 def main():
@@ -54,14 +58,30 @@ def main():
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
 
-    # baseline = Baseline(UNITS)
+    baseline = Baseline(UNITS)
 
     history = []
 
     # l_optimizer = tf.train.RMSPropOptimizer(0.001)
     l_optimizer = tf.train.AdamOptimizer()
-    # bl_optimizer = tf.train.RMSPropOptimizer(0.001)
+    bl_optimizer = tf.train.AdamOptimizer()
     batch = None
+
+    def maybe_pad_sentence(s):
+        return tf.keras.preprocessing.sequence.pad_sequences(
+            s,
+            maxlen=MAX_TARGET_LEN,
+            padding='post'
+        )
+
+    def get_returns(r: float, seq_len: int):
+        return list(reversed([
+            r * (GAMMA ** t) for t in range(seq_len)
+        ]))
+
+    def sentence_to_idxs(sentence: str):
+        return [env.lang.word2idx[token]
+                for token in char_tokenizer(sentence)]
 
     for episode in range(EPISODES):
 
@@ -78,8 +98,10 @@ def main():
             init_hidden = initialize_hidden_state(1, UNITS)
             state_inp = [env.lang.word2idx[token]
                          for token in char_tokenizer(state)]
+            state_inp_b = maybe_pad_sentence([state_inp])
             enc_hidden = encoder(
-                tf.convert_to_tensor([state_inp]), init_hidden)
+                tf.convert_to_tensor(state_inp_b), init_hidden
+            )
             dec_hidden = enc_hidden
 
             w = BEGIN_TAG
@@ -94,7 +116,7 @@ def main():
                 w_dist = tf.distributions.Categorical(probs=w_probs_b[0])
                 w_idx = w_dist.sample(1)
                 actions.append(w_idx)
-                # w_idx = tf.argmax(w_probs[0]).numpy()
+                # w_idx = tf.argmax(w_probs[0]).numpy()[0]
                 w = targ_lang.idx2word[w_idx.numpy()[0]]
                 curr_w_enc = tf.expand_dims(
                     [targ_lang.word2idx[w]] * 1, 1)
@@ -112,15 +134,6 @@ def main():
         while len(history) >= BATCH_SIZE:
             batch = history[:BATCH_SIZE]
 
-            def get_returns(r: float, seq_len: int):
-                return list(reversed([
-                    r * (GAMMA ** t) for t in range(seq_len)
-                ]))
-
-            def sentence_to_idxs(sentence: str):
-                return [env.lang.word2idx[token]
-                        for token in char_tokenizer(sentence)]
-
             # def action_to_encs(action: str):
             #     begin_w = tf.expand_dims(
             #         [targ_lang.word2idx[BEGIN_TAG]], 1)
@@ -129,13 +142,6 @@ def main():
             #         for token in char_tokenizer(action)
             #     ]
             #     return enc
-
-            def maybe_pad_sentence(s):
-                return tf.keras.preprocessing.sequence.pad_sequences(
-                    s,
-                    maxlen=MAX_TARGET_LEN,
-                    padding='post'
-                )
 
             state_inp_b, action_encs_b, reward_b, ret_seq_b = zip(*[
                 [
@@ -158,7 +164,7 @@ def main():
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
             loss = 0
-            # loss_bl = 0
+            loss_bl = 0
 
             with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
@@ -181,27 +187,23 @@ def main():
 
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
 
-                    # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
-                    # delta_b = ret_b - bl_val_b
-
                     w_probs_b, dec_hidden_b = decoder(
                         prev_w_idx_b, dec_hidden_b
                     )
                     curr_w_idx_b = action_encs_b[:, t]
                     # w_probs_b = tf.nn.softmax(w_logits_b)
                     dist = tf.distributions.Categorical(probs=w_probs_b)
-                    # loss_bl += - \
-                    #     tf.math.multiply(delta_b, bl_val_b)
-                    # cost_b = -tf.math.multiply(
-                    #     tf.transpose(dist.log_prob(
-                    #         tf.transpose(curr_w_idx_b))), delta_b
-                    # )
-                    cost_b = -tf.math.multiply(
-                        tf.transpose(dist.log_prob(
-                            tf.transpose(curr_w_idx_b))), ret_b
+                    log_probs_b = tf.transpose(
+                        dist.log_prob(tf.transpose(curr_w_idx_b))
                     )
-                    # print(cost_b.shape)
+                    bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                    delta_b = ret_b - bl_val_b
+
+                    cost_b = -tf.math.multiply(log_probs_b, delta_b)
+                    # cost_b = -tf.math.multiply(log_probs_b, ret_b)
+
                     loss += cost_b
+                    loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                     prev_w_idx_b = curr_w_idx_b
 
@@ -210,23 +212,23 @@ def main():
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
 
-            # grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
+            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
 
             # finally, apply gradient
             l_optimizer.apply_gradients(zip(grads, model_vars))
-            # bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
+            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
 
-        if episode % 20 == 0 and batch != None:
+        if episode % max(BATCH_SIZE, 128) == 0 and batch != None:
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
             good_rewards = [(s, a_str, r) for s, _, a_str, r in batch]
             for s, a, r in random.sample(good_rewards, min(len(good_rewards), 3)):
                 print("prev_state: ", s)
-                print("action: ", a)
+                print("actions: ", a)
                 print("reward: ", r)
                 # print("return: ", get_returns(r, MAX_TARGET_LEN))
             print(
