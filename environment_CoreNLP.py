@@ -6,9 +6,10 @@ from itertools import takewhile
 import random
 from difflib import SequenceMatcher
 
-from pycorenlp import StanfordCoreNLP
+#from pycorenlp import StanfordCoreNLP
 import random
 import math
+import pdb
 
 CONVO_LEN = 1
 MIN_UTTERANCE_LEN = 4
@@ -36,7 +37,7 @@ class Environment:
             tokenizer=lambda s: list(s),
             empty_token=EMPTY_TOKEN
         )
-        self.stanford = StanfordCoreNLP('http://localhost:9000')
+        #self.stanford = StanfordCoreNLP('http://localhost:9000')
 
     def step(self, action):
         if len(self.history) == 0:
@@ -66,7 +67,7 @@ class Environment:
 
     def calc_reward(self, utterance: str):
         # Use CoreNLP to calculate rewards
-        
+        '''
         result = self.stanford.annotate(utterance,
                                         properties={
                                             'annotators': 'sentiment',
@@ -78,19 +79,10 @@ class Environment:
         # negative: 1; # neutral: 2; positive: 3
         s_scores = [int(s['sentimentValue']) - 2 for s in result['sentences']]
         reward = math.tanh(sum(s_scores))
-
+        '''
+        reward = 0
+        
         return reward
-
-# def random_utterance(min_len, max_len):
-#     utt_len = random.randint(min_len, max_len + 1)
-#     random_chars = [random.choice(
-#         string.ascii_uppercase +
-#         string.digits +
-#         string.ascii_lowercase + ' .,!?'
-#     ) for _ in range(utt_len)]
-#     result = ' '.join(random_chars)
-#     result = BEGIN_TAG + ' ' + result + ' ' + END_TAG
-#     return result
 
 
 
