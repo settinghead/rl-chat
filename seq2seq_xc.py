@@ -1,96 +1,78 @@
 import tensorflow as tf
+from tensorflow.keras.layers import (
+    LSTMCell, LSTM, Dense, Embedding, RNN
+)
+from tensorflow.keras import(
+    Sequential
+)
+from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 
 
 class Encoder(tf.keras.Model):
-    def __init__(self, num_units):
-        self.num_units = num_units
-        self.encoder_cell = tf.nn.rnn_cell.LSTMCell(num_units)
+    def __init__(self, num_units, backwards, batch_size, embedding_dim, max_seq_len, src_vocab_size):
+        super(tf.keras.Model, self).__init__()
+        self.embd = Embedding(
+            src_vocab_size, embedding_dim,
+            batch_input_shape=[batch_size, None])
+        self.lstm1 = LSTM(
+            num_units,
+            return_sequences=False,
+            return_state=True,
+            # go_backwards=backwards
+        )
 
-        def call(self, x, sl, final=True):
-            reverse = True
-            state = self.encoder_cell.zero_state()
-            timestep_x = tf.unstack(x, axis=1)
-            if reverse:
-                timestep_x = reversed(timestep_x)
-            cell_states = []
+    def call(self, x_seq):
+        x = self.embd(x_seq)
+        _, h, c = self.lstm1(x)
+        x = (h, c)
+        return x
 
-            for input_step in timestep_x:
-                _, state = self.encoder_cell(input_step, state)
-                cell_states.append(state[0])
 
-            cell_states = tf.stack(cell_states, axis=1)
-
-            if final:
-                if reverse:
-                    final_cell_state = cell_states[:, -1, :]
-                else:
-                    idxs_last_output = tf.stack([tf.range(len(x)), sl], axis=1)
-                    final_cell_state = tf.gather_nd(
-                        cell_states, idx_last_output)
-
-            return cell_states
+def get_decoder_cell(num_units, max_seq_len, targ_vocab_size):
+    return Sequential([
+        LSTMCell(
+            num_units, input_shape=((1, targ_vocab_size)),
+        ),
+        Dense(targ_vocab_size, activation=None)
+    ])
 
 
 import numpy as np
 
 
-def save(model: tf.keras.Model, folder: str):
-    saver = tf.train.Saver(model.variables)
-    saver.save(filder)
+def save(model: tf.keras.Model, optimizer, folder: str):
+    saver = tf.train.Checkpoint(
+        optimizer=optimizer,
+        model=model,
+        optimizer_step=tf.train.get_or_create_global_step()
+    )
+    saver.save(folder)
 
 
-def load(model: tf.keras.Model, folder: str, bs: int, seq_len: int, hidden_dim: int):
+def load(model: tf.keras.Model, optimizer,
+         folder: str, bs: int, seq_len: int, hidden_dim: int):
     model(np.zeros((bs, seq_len, hidden_dim),
                    dtype=np.float32), list(range(2, bs + 2, 1)))
-    saver = tf.train.Saver(model.variables)
+    saver = tf.train.Checkpoint(
+        optimizer=optimizer,
+        model=model,
+        optimizer_step=tf.train.get_or_create_global_step()
+    )
     saver.restore(folder)
-    return model
-
-
-class Decoder(tf.keras.Model):
-    def __init__(self, word2idx, idx2word, idx2emb, num_units, max_tokens):
-        self.w2i = word2idx
-        self.i2w = idx2word
-        self.i2e = idx2emb
-        self.num_units = num_units
-        self.max_tokens = max_tokens
-        self.decoder_cell = tf.nn.rnn_cell.LSTMCell(num_units)
-        self.word_predictor = tf.layers.Dense(len(word2idx), activation=None)
-
-    def call(self, x, sos, state, training=False):
-        output = tf.convert_to_tensor(sos, dtype=tf.float32)
-        words_predicted, words_logits = [], []
-
-        for mt in range(self.max_tokens):
-            output, state = self.decoder_cell(output, state)
-            logits = self.word_predictor(output)
-            logits = tf.nn.softmax(logits), state
-            pred_word = tf.argmax(logits, 1).numpy()
-            if training:  # teacher forcing?
-                output = x[:, mt, :]
-            else:
-                output = [self.i2e[i] for i in pred_word]
-            words_predicted.append(pred_word)
-            words_logits.append(logits)
-
-        words_logits = tf.stack(words_logits, axis=1)
-
-        words_predicted = tf.stack(words_predicted, axis=1)
-        return words_predicted, words_logits
 
 
 NUM_EPOCHS = 300
 
 
-def train(encoder: Encoder, decoder: Decoder):
-    x, y, sl, sos, w2i, i2w, i2e = get_data()
-    optimzer = tf.train.AdamOptimizer()
+# def train(encoder: Encoder, decoder: Decoder):
+#     x, y, sl, sos, w2i, i2w, i2e = get_data()
+#     optimzer = tf.train.AdamOptimizer()
 
-    for _ in range(NUM_EPOCHS):
-        for x_batch, y_batch, sl_batch in zip(x, y, sl):
-            optimzer.minimize(lambda: get_loss(
-                encoder, decoder, x_batch, y_batch, sl_batch, sos)
-            )
+#     for _ in range(NUM_EPOCHS):
+#         for x_batch, y_batch, sl_batch in zip(x, y, sl):
+#             optimzer.minimize(lambda: get_loss(
+#                 encoder, decoder, x_batch, y_batch, sl_batch, sos)
+#             )
 
 
 def cost_function(output, target, sl):
@@ -104,9 +86,10 @@ def cost_function(output, target, sl):
     return tf.reduce_mean(cross_entropy)
 
 
-def get_loss(encoder: Encoder, decoder: Decoder, x, y, sl, sos):
-    cell_state = encoder.forward(x, sl)
-    _, wl = decoder.forward(x, sos, cell_state, traning=True)
+def get_loss(encoder: tf.keras.Model, decoder: tf.keras.Model, x, y, sl, sos):
+    cell_state = encoder(x)
+
+    _, wl = decoder(x, sos, cell_state, traning=True)
     loss = cost_function(wl, y, sl)
     return loss
 
@@ -116,23 +99,6 @@ import copy
 
 
 def remove_pad_sequences(sequences, pad_id=0):
-    """Remove padding.
-    Parameters
-    -----------
-    sequences : list of list of int
-        All sequences where each row is a sequence.
-    pad_id : int
-        The pad ID.
-    Returns
-    ----------
-    list of list of int
-        The processed sequences.
-    Examples
-    ----------
-    >>> sequences = [[2,3,4,0,0], [5,1,2,3,4,0,0,0], [4,5,0,2,4,0,0,0]]
-    >>> print(remove_pad_sequences(sequences, pad_id=0))
-    [[2, 3, 4], [5, 1, 2, 3, 4], [4, 5, 0, 2, 4]]
-    """
     sequences_out = copy.deepcopy(sequences)
 
     for i, _ in enumerate(sequences):
@@ -148,6 +114,14 @@ def remove_pad_sequences(sequences, pad_id=0):
     return sequences_out
 
 
+def maybe_pad_sentences(s):
+    return tf.keras.preprocessing.sequence.pad_sequences(
+        s,
+        padding='post',
+        value=0  # TODO: change to symbolic
+    )
+
+
 def initial_setup():
     metadata, idx_q, idx_a = load_data(PATH='data/twitter/')
     (trainX, trainY), (testX, testY), (validX, validY) = split_dataset(idx_q, idx_a)
@@ -161,6 +135,17 @@ def initial_setup():
 
 
 BATCH_SIZE = 32
+NUM_UNITS = 128
+MAX_TOKENS_SRC = 20
+MAX_TOKENS_TARG = 20
+EMBEDDING_DIM = 64
+
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
@@ -174,8 +159,28 @@ if __name__ == '__main__':
 
     n_step = src_len // BATCH_SIZE
     src_vocab_size = len(metadata['idx2w'])  # 8002 (0~8001)
-    emb_dim = 1024
 
     word2idx = metadata['w2idx']   # dict  word 2 index
     idx2word = metadata['idx2w']   # list index 2 word
-    print(word2idx)
+    optimzer = tf.train.AdamOptimizer()
+
+    encoder = Encoder(
+        NUM_UNITS,
+        backwards=False,
+        batch_size=BATCH_SIZE,
+        embedding_dim=EMBEDDING_DIM,
+        max_seq_len=MAX_TOKENS_SRC,
+        src_vocab_size=len(word2idx)
+    )
+    # decoder = get_decoder_cell(
+    #     NUM_UNITS, MAX_TOKENS_TARG, len(word2idx)
+    # )
+    BUFFER_SIZE = len(trainX)
+
+    dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
+
+    for _ in range(NUM_EPOCHS):
+        for batch, (x_batch, y_batch) in enumerate(dataset):
+            x_batch = maybe_pad_sentences(x_batch)
+            y_batch = maybe_pad_sentences(y_batch)
+            encoder(tf.convert_to_tensor(x_batch, dtype='float32'))
