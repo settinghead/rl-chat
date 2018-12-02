@@ -1,7 +1,8 @@
 
 
-BEGIN_TAG = '<go>'
-END_TAG = '<eos>'
+BEGIN_TAG = "▶"
+END_TAG = "◀"
+EMPTY_TOKEN = "◌"
 
 
 def load_conv_text():

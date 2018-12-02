@@ -56,3 +56,4 @@ class LanguageIndex():
                 tokenizer(s) for s in samples
             ], VOCAB_SIZE, [unknown_token, empty_token]
         )
+        self.vocab = self.idx2word
