@@ -122,7 +122,6 @@ def load(model: tf.keras.Model, optimizer,
 NUM_EPOCHS = 100
 
 
-from data.twitter.data import load_data, split_dataset
 import copy
 
 
@@ -146,19 +145,7 @@ def maybe_pad_sentences(s):
     )
 
 
-def initial_setup():
-    metadata, idx_q, idx_a = load_data(PATH='data/twitter/')
-    (trainX, trainY), (testX, testY), (validX, validY) = split_dataset(idx_q, idx_a)
-    trainX = remove_pad_sequences(trainX.tolist())
-    trainY = remove_pad_sequences(trainY.tolist())
-    testX = remove_pad_sequences(testX.tolist())
-    testY = remove_pad_sequences(testY.tolist())
-    validX = remove_pad_sequences(validX.tolist())
-    validY = remove_pad_sequences(validY.tolist())
-    return metadata, trainX, trainY, testX, testY, validX, validY
-
-
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 NUM_UNITS = 128
 MAX_TOKENS_SRC = 20
 MAX_TOKENS_TARG = 20
@@ -176,10 +163,31 @@ def decode_sentence(word_idxs, idx2word):
 
 
 import random
+from data import load_conv_text, load_twitter_text
+from corpus_utils import LanguageIndex, tokenize_sentence, EMPTY_IDX, UNKNOWN_IDX, filter_line
+
+
+def encode_sentence(sentence, lang: LanguageIndex):
+    return [lang.word2idx.get(w, lang.word2idx[lang._unknown_token]) for w in tokenize_sentence(sentence)]
+
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
-    metadata, trainX, trainY, testX, testY, validX, validY = initial_setup()
+    # metadata, trainX, trainY = load_data(PATH='data/twitter/')
+    # why not both?
+    questions1, answers1 = load_conv_text()
+    questions2, answers2 = load_twitter_text()
+    questions = list(questions1) + list(questions2)
+    answers = list(answers1) + list(answers2)
+    # questions, answers = data.load_conv_text()
+
+    questions = [filter_line(q) for q in questions]
+    answers = [filter_line(a) for a in answers]
+    lang = LanguageIndex(questions + answers)
+
+    trainX = [encode_sentence(s, lang) for s in questions]
+    trainY = [encode_sentence(s, lang) for s in answers]
+    print("Dataset size: ", len(trainX))
 
     # Parameters
     src_len = len(trainX)
@@ -187,26 +195,23 @@ if __name__ == '__main__':
 
     assert src_len == tgt_len
 
-    n_step = src_len // BATCH_SIZE
-    src_vocab_size = len(metadata['idx2w'])  # 8002 (0~8001)
+    print("Vocab size: ", len(lang.word2idx))
 
-    word2idx = metadata['w2idx']   # dict  word 2 index
-    idx2word = metadata['idx2w']   # list index 2 word
     optimizer = tf.train.AdamOptimizer()
 
     encoder = Encoder(
         NUM_UNITS,
-        backwards=True,
+        backwards=False,
         batch_size=BATCH_SIZE,
         embedding_dim=EMBEDDING_DIM,
-        src_vocab_size=len(word2idx)
+        src_vocab_size=len(lang.word2idx)
     )
     decoder_cell = DecoderCell(
         NUM_UNITS,
         encoder.embd,
         batch_size=BATCH_SIZE,
         embedding_dim=EMBEDDING_DIM,
-        targ_vocab_size=len(word2idx)
+        targ_vocab_size=len(lang.word2idx)
     )
 
     dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
@@ -258,7 +263,7 @@ if __name__ == '__main__':
                 grads = tape.gradient(loss, model_vars)
             optimizer.apply_gradients(zip(grads, model_vars))
 
-            if batch % 150 == 0:
+            if batch % 100 == 0:
                 sample_xs = random.sample(trainX, BATCH_SIZE)
                 sample_xs = maybe_pad_sentences(sample_xs)
                 h_b = encoder(
@@ -284,12 +289,12 @@ if __name__ == '__main__':
                     outputs.append(o.numpy())
                 outputs = np.rollaxis(np.asarray(outputs), 0, 1)
                 outputs = [
-                    decode_sentence(sentence, idx2word)
+                    decode_sentence(sentence, lang.idx2word)
                     for sentence in outputs
                 ]
                 sample_pairs = random.sample(list(zip(sample_xs, outputs)), 5)
                 for q, a in sample_pairs:
-                    print("Q: ", decode_sentence(q, idx2word))
+                    print("Q: ", decode_sentence(q, lang.idx2word))
                     print("A: ", a)
 
                 print("loss: ", loss.numpy())
