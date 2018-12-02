@@ -69,15 +69,19 @@ class DecoderCell(tf.keras.Model):
         # print(x.shape, cell_state[0].shape)
         # print(y_at_t.shape, x.shape, cell_state[0].shape, cell_state[1].shape)
         h1, h2, h3 = cell_state
+        if is_training:
+            h1 = (tf.nn.dropout(h1[0], 0.5), tf.nn.dropout(h1[1], 0.5))
         x, h1 = self.lstm_cell1(x, h1)
         if is_training:
-            x, h1 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h1, 0.5)
+            x, h2 = tf.nn.dropout(x, 0.5), (tf.nn.dropout(
+                h2[0], 0.5), tf.nn.dropout(h2[1], 0.5))
         x, h2 = self.lstm_cell2(x, h2)
         if is_training:
-            x, h2 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h2, 0.5)
+            x, h3 = tf.nn.dropout(x, 0.5), (tf.nn.dropout(
+                h3[0], 0.5), tf.nn.dropout(h3[1], 0.5))
         x, h3 = self.lstm_cell3(x, h3)
         if is_training:
-            x, h3 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h3, 0.5)
+            x = tf.nn.dropout(x, 0.5)
         logits = self.fc(x)
         return logits, (h1, h2, h3)
 
