@@ -1,5 +1,5 @@
 /.vscode
-/__pycache__
+__pycache__
 /training_checkpoints
 /pretrained_models
-/.ipynb_checkpoints
+.ipynb_checkpoints
