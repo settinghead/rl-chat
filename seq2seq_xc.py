@@ -111,8 +111,71 @@ def get_loss(encoder: Encoder, decoder: Decoder, x, y, sl, sos):
     return loss
 
 
-from data.twitter.data import load_data
+from data.twitter.data import load_data, split_dataset
+import copy
+
+
+def remove_pad_sequences(sequences, pad_id=0):
+    """Remove padding.
+    Parameters
+    -----------
+    sequences : list of list of int
+        All sequences where each row is a sequence.
+    pad_id : int
+        The pad ID.
+    Returns
+    ----------
+    list of list of int
+        The processed sequences.
+    Examples
+    ----------
+    >>> sequences = [[2,3,4,0,0], [5,1,2,3,4,0,0,0], [4,5,0,2,4,0,0,0]]
+    >>> print(remove_pad_sequences(sequences, pad_id=0))
+    [[2, 3, 4], [5, 1, 2, 3, 4], [4, 5, 0, 2, 4]]
+    """
+    sequences_out = copy.deepcopy(sequences)
+
+    for i, _ in enumerate(sequences):
+        # for j in range(len(sequences[i])):
+        #     if sequences[i][j] == pad_id:
+        #         sequences_out[i] = sequences_out[i][:j]
+        #         break
+        for j in range(1, len(sequences[i])):
+            if sequences[i][-j] != pad_id:
+                sequences_out[i] = sequences_out[i][0:-j + 1]
+                break
+
+    return sequences_out
+
+
+def initial_setup():
+    metadata, idx_q, idx_a = load_data(PATH='data/twitter/')
+    (trainX, trainY), (testX, testY), (validX, validY) = split_dataset(idx_q, idx_a)
+    trainX = remove_pad_sequences(trainX.tolist())
+    trainY = remove_pad_sequences(trainY.tolist())
+    testX = remove_pad_sequences(testX.tolist())
+    testY = remove_pad_sequences(testY.tolist())
+    validX = remove_pad_sequences(validX.tolist())
+    validY = remove_pad_sequences(validY.tolist())
+    return metadata, trainX, trainY, testX, testY, validX, validY
+
+
+BATCH_SIZE = 32
 
 if __name__ == '__main__':
     tf.enable_eager_execution()
-    metadata, idx_q, idx_a = load_data(PATH='data/twitter/')
+    metadata, trainX, trainY, testX, testY, validX, validY = initial_setup()
+
+    # Parameters
+    src_len = len(trainX)
+    tgt_len = len(trainY)
+
+    assert src_len == tgt_len
+
+    n_step = src_len // BATCH_SIZE
+    src_vocab_size = len(metadata['idx2w'])  # 8002 (0~8001)
+    emb_dim = 1024
+
+    word2idx = metadata['w2idx']   # dict  word 2 index
+    idx2word = metadata['idx2w']   # list index 2 word
+    print(word2idx)
