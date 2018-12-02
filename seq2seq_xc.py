@@ -50,51 +50,49 @@ class Encoder(tf.keras.Model):
         return (c, m)
 
 
+class Encoder(tf.keras.Model):
+    def __init__(self, num_units, backwards, batch_size, embedding_dim, src_vocab_size):
+        super(tf.keras.Model, self).__init__()
+        self.embd = Embedding(
+            src_vocab_size, embedding_dim,
+            batch_input_shape=[batch_size, None])
+        self.lstm1 = CuDNNLSTM(
+            num_units,
+            return_sequences=False,
+            return_state=True,
+            go_backwards=backwards
+        )
+        keep_prob = 0.5
+        self.dropout = Dropout(keep_prob)
+
+    def call(self, x_seq, is_training):
+        x = self.embd(x_seq)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
+        _, c, m = self.lstm1(x)
+        return (c, m)
+
+
 class DecoderCell(tf.keras.Model):
     def __init__(self, num_units, embd, batch_size, embedding_dim, targ_vocab_size):
-        keep_prob = 0.5
         super(tf.keras.Model, self).__init__()
         self.embd = embd
-        # self.lstm_cell = Sequential([
-        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-        #     num_units),
-        #     Dropout(keep_prob),
-        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-        #     num_units),
-        #     Dropout(keep_prob),
-        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-        #     num_units),
-        #     Dropout(keep_prob)
-        # ])
         self.lstm_cell1 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-            num_units)
-        self.lstm_cell2 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-            num_units)
-        self.lstm_cell3 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-            num_units)
+            num_units
+        )
         self.fc = Dense(targ_vocab_size, activation=None)
-        # self.dropout = Dropout(keep_prob)
 
     def call(self, y_at_t, cell_state, is_training):
         x = self.embd(y_at_t)
-        # x = self.dropout(x, training=is_training)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
         # print(x.shape, cell_state[0].shape)
         # print(y_at_t.shape, x.shape, cell_state[0].shape, cell_state[1].shape)
-        h1, h2, h3 = cell_state
-        # h1 = (self.dropout(h1[0], training=is_training),
-        #       self.dropout(h1[1], training=is_training))
-        x, h1 = self.lstm_cell1(x, h1)
-        # x = self.dropout(x, training=is_training)
-        # h2 = (self.dropout(h2[0], training=is_training),
-        #       self.dropout(h2[1], training=is_training))
-        x, h2 = self.lstm_cell2(x, h2)
-        # x = self.dropout(x, training=is_training)
-        # h3 = (self.dropout(h3[0], training=is_training),
-        #       self.dropout(h3[1], training=is_training))
-        x, h3 = self.lstm_cell3(x, h3)
-        # x = self.dropout(x, training=is_training)
+        x, h = self.lstm_cell1(x, cell_state)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
         logits = self.fc(x)
-        return logits, (h1, h2, h3)
+        return logits, h
 
 
 import numpy as np
@@ -229,13 +227,14 @@ if __name__ == '__main__':
                 logits_seq = []
                 for idx in range(y_batch.shape[1] + 1):
                     # use teacher forcing
-                    cell_state_b = (
-                        h_b,
-                        decoder_cell.lstm_cell2.zero_state(
-                            BATCH_SIZE, dtype='float32'),
-                        decoder_cell.lstm_cell3.zero_state(
-                            BATCH_SIZE, dtype='float32'),
-                    )
+                    # cell_state_b = (
+                    #     h_b,
+                    #     decoder_cell.lstm_cell2.zero_state(
+                    #         BATCH_SIZE, dtype='float32'),
+                    #     decoder_cell.lstm_cell3.zero_state(
+                    #         BATCH_SIZE, dtype='float32'),
+                    # )
+                    cell_state_b = h_b
                     w_logits, cell_state_b = decoder_cell(
                         o, cell_state_b, is_training=True
                     )
@@ -270,13 +269,14 @@ if __name__ == '__main__':
                 o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
                 for idx in range(MAX_TOKENS_TARG):
                     # use teacher forcing
-                    cell_state_b = (
-                        h_b,
-                        decoder_cell.lstm_cell2.zero_state(
-                            BATCH_SIZE, dtype='float32'),
-                        decoder_cell.lstm_cell3.zero_state(
-                            BATCH_SIZE, dtype='float32'),
-                    )
+                    # cell_state_b = (
+                    #     h_b,
+                    #     decoder_cell.lstm_cell2.zero_state(
+                    #         BATCH_SIZE, dtype='float32'),
+                    #     decoder_cell.lstm_cell3.zero_state(
+                    #         BATCH_SIZE, dtype='float32'),
+                    # )
+                    cell_state_b = h_b
                     w_logits, cell_state_b = decoder_cell(
                         o, cell_state_b, is_training=False)
                     o = tf.nn.softmax(w_logits)
