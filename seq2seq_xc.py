@@ -1,11 +1,15 @@
 import tensorflow as tf
 from tensorflow.keras.layers import (
-    CuDNNLSTM, Dense, Embedding, RNN
+    CuDNNLSTM, Dense, Embedding, RNN, LSTM
 )
 from tensorflow.keras import(
     Sequential
 )
 from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
+from tqdm import tqdm
+from tensorflow.contrib.seq2seq import (
+    sequence_loss
+)
 
 
 class Encoder(tf.keras.Model):
@@ -36,7 +40,6 @@ class DecoderCell(tf.keras.Model):
         self.lstm_cell1 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
             num_units
         )
-        print(targ_vocab_size)
         self.fc = Dense(targ_vocab_size, activation=None)
 
     def call(self, y_at_t, cell_state):
@@ -97,12 +100,12 @@ def cost_function(output, target, sl):
     return tf.reduce_mean(cross_entropy)
 
 
-def get_loss(encoder: tf.keras.Model, decoder: tf.keras.Model, x, y, sl, sos):
-    cell_state = encoder(x)
+# def get_loss(encoder: tf.keras.Model, decoder: tf.keras.Model, x, y, sl, sos):
+#     cell_state = encoder(x)
 
-    _, wl = decoder(x, sos, cell_state, traning=True)
-    loss = cost_function(wl, y, sl)
-    return loss
+#     _, wl = decoder(x, sos, cell_state, traning=True)
+#     loss = cost_function(wl, y, sl)
+#     return loss
 
 
 from data.twitter.data import load_data, split_dataset
@@ -188,20 +191,44 @@ if __name__ == '__main__':
         embedding_dim=EMBEDDING_DIM,
         targ_vocab_size=len(word2idx)
     )
-    BUFFER_SIZE = len(trainX)
 
     dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
-
-    for _ in range(NUM_EPOCHS):
+    print(encoder.variables)
+    for i in range(NUM_EPOCHS):
         for batch, (x_batch, y_batch) in enumerate(dataset):
-            x_batch = maybe_pad_sentences(x_batch)
-            y_batch = maybe_pad_sentences(y_batch)
-            cell_state = encoder(
-                tf.convert_to_tensor(x_batch, dtype='float32')
-            )
-            o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
-            for idx in range(y_batch.shape[1] + 1):
-                # use teacher forcing
-                w_logits, cell_state = decoder_cell(o, cell_state)
-                if (idx < y_batch.shape[1]):
-                    o = tf.convert_to_tensor(y_batch[:, idx])
+            with tf.GradientTape() as tape:
+
+                x_batch = maybe_pad_sentences(x_batch)
+                sl_b = [len(y) for y in y_batch]
+                y_batch = maybe_pad_sentences(y_batch)
+                cell_state = encoder(
+                    tf.convert_to_tensor(x_batch, dtype='float32')
+                )
+
+                o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
+                logits_seq = []
+                for idx in range(y_batch.shape[1] + 1):
+                    # use teacher forcing
+                    w_logits, cell_state = decoder_cell(o, cell_state)
+                    if(idx > 0):
+                        logits_seq.append(w_logits)
+
+                    if (idx < y_batch.shape[1]):
+                        o = tf.convert_to_tensor(y_batch[:, idx])
+
+                logits_seq = tf.transpose(
+                    tf.convert_to_tensor(logits_seq), [1, 0, 2]
+                )
+                masks = tf.cast(tf.sequence_mask(
+                    sl_b, y_batch.shape[1]
+                ), dtype='float32')
+                targets = tf.convert_to_tensor(y_batch)
+                loss = sequence_loss(
+                    logits=logits_seq, targets=targets,
+                    weights=masks
+                )
+                print("loss: ", loss.numpy())
+
+                model_vars = encoder.variables + decoder_cell.variables
+                grads = tape.gradient(loss, model_vars)
+            optimzer.apply_gradients(zip(grads, model_vars))
