@@ -1,7 +1,8 @@
 import tensorflow as tf
 from tensorflow.keras.layers import (
-    Dense, Embedding, RNN, LSTM, CuDNNLSTM
+    Dense, Embedding, RNN, LSTM, CuDNNLSTM, Dropout
 )
+from tensorflow.keras.activations import relu
 from tensorflow.keras import(
     Sequential
 )
@@ -11,6 +12,8 @@ from tensorflow.contrib.seq2seq import (
     sequence_loss
 )
 
+from tensorlayer.layers import DenseLayer, EmbeddingInputlayer, Seq2Seq, retrieve_seq_length_op2
+
 
 class Encoder(tf.keras.Model):
     def __init__(self, num_units, backwards, batch_size, embedding_dim, src_vocab_size):
@@ -18,44 +21,51 @@ class Encoder(tf.keras.Model):
         self.embd = Embedding(
             src_vocab_size, embedding_dim,
             batch_input_shape=[batch_size, None])
-        self.lstm1 = CuDNNLSTM(
-            num_units,
-            return_sequences=True,
-            return_state=False,
-            # go_backwards=backwards
-        )
-        self.lstm2 = CuDNNLSTM(
-            num_units,
-            return_sequences=True,
-            return_state=False
-        )
-        self.lstm3 = CuDNNLSTM(
-            num_units,
-            return_sequences=False,
-            return_state=True
-        )
+        self.lstm_layers = Sequential([
+            # Dropout(0.5),
+            CuDNNLSTM(
+                num_units,
+                return_sequences=True,
+                return_state=False,
+                go_backwards=backwards
+            ),
+            # Dropout(0.5),
+            CuDNNLSTM(
+                num_units,
+                return_sequences=True,
+                return_state=False
+            ),
+            # Dropout(0.5),
+            CuDNNLSTM(
+                num_units,
+                return_sequences=False,
+                return_state=True
+            )
+        ])
+        self.dropout = Dropout(0.5)
 
     def call(self, x_seq, is_training):
         x = self.embd(x_seq)
-        if is_training:
-            x = tf.nn.dropout(x, 0.5)
-        x = self.lstm1(x)
-        if is_training:
-            x = tf.nn.dropout(x, 0.5)
-        x = self.lstm2(x)
-        if is_training:
-            x = tf.nn.dropout(x, 0.5)
-        _, c, m = self.lstm3(x)
+        _, c, m = self.lstm_layers(x)
         return (c, m)
 
 
 class DecoderCell(tf.keras.Model):
-    def __init__(self, num_units, batch_size, embedding_dim, targ_vocab_size):
+    def __init__(self, num_units, embd, batch_size, embedding_dim, targ_vocab_size):
         keep_prob = 0.5
         super(tf.keras.Model, self).__init__()
-        self.embd = Embedding(
-            targ_vocab_size, embedding_dim,
-            batch_input_shape=[batch_size, None])
+        self.embd = embd
+        # self.lstm_cell = Sequential([
+        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+        #     num_units),
+        #     Dropout(keep_prob),
+        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+        #     num_units),
+        #     Dropout(keep_prob),
+        #     tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+        #     num_units),
+        #     Dropout(keep_prob)
+        # ])
         self.lstm_cell1 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
             num_units)
         self.lstm_cell2 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
@@ -63,25 +73,26 @@ class DecoderCell(tf.keras.Model):
         self.lstm_cell3 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
             num_units)
         self.fc = Dense(targ_vocab_size, activation=None)
+        # self.dropout = Dropout(keep_prob)
 
     def call(self, y_at_t, cell_state, is_training):
         x = self.embd(y_at_t)
+        # x = self.dropout(x, training=is_training)
         # print(x.shape, cell_state[0].shape)
         # print(y_at_t.shape, x.shape, cell_state[0].shape, cell_state[1].shape)
         h1, h2, h3 = cell_state
-        if is_training:
-            h1 = (tf.nn.dropout(h1[0], 0.5), tf.nn.dropout(h1[1], 0.5))
+        # h1 = (self.dropout(h1[0], training=is_training),
+        #       self.dropout(h1[1], training=is_training))
         x, h1 = self.lstm_cell1(x, h1)
-        if is_training:
-            x, h2 = tf.nn.dropout(x, 0.5), (tf.nn.dropout(
-                h2[0], 0.5), tf.nn.dropout(h2[1], 0.5))
+        # x = self.dropout(x, training=is_training)
+        # h2 = (self.dropout(h2[0], training=is_training),
+        #       self.dropout(h2[1], training=is_training))
         x, h2 = self.lstm_cell2(x, h2)
-        if is_training:
-            x, h3 = tf.nn.dropout(x, 0.5), (tf.nn.dropout(
-                h3[0], 0.5), tf.nn.dropout(h3[1], 0.5))
+        # x = self.dropout(x, training=is_training)
+        # h3 = (self.dropout(h3[0], training=is_training),
+        #       self.dropout(h3[1], training=is_training))
         x, h3 = self.lstm_cell3(x, h3)
-        if is_training:
-            x = tf.nn.dropout(x, 0.5)
+        # x = self.dropout(x, training=is_training)
         logits = self.fc(x)
         return logits, (h1, h2, h3)
 
@@ -111,17 +122,6 @@ def load(model: tf.keras.Model, optimizer,
 
 
 NUM_EPOCHS = 100
-
-
-def cost_function(output, target, sl):
-    cross_entropy = target * tf.log(tf.clip_by_value(output, 1e-10, 1.0))
-    cross_entropy = -tf.reduce_sum(cross_entropy, 2)
-    mask = tf.cast(tf.sequence_mask(sl, output.shape[1]), dtype=tf.float32)
-    cross_entropy *= mask
-
-    cross_entropy = tf.reduce_sum(cross_entropy, 1)
-    cross_entropy /= tf.reduce_sum(mask, 1)
-    return tf.reduce_mean(cross_entropy)
 
 
 from data.twitter.data import load_data, split_dataset
@@ -160,11 +160,11 @@ def initial_setup():
     return metadata, trainX, trainY, testX, testY, validX, validY
 
 
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 NUM_UNITS = 128
 MAX_TOKENS_SRC = 20
 MAX_TOKENS_TARG = 20
-EMBEDDING_DIM = 64
+EMBEDDING_DIM = 512
 
 
 def batch(iterable, n=1):
@@ -198,13 +198,14 @@ if __name__ == '__main__':
 
     encoder = Encoder(
         NUM_UNITS,
-        backwards=False,
+        backwards=True,
         batch_size=BATCH_SIZE,
         embedding_dim=EMBEDDING_DIM,
         src_vocab_size=len(word2idx)
     )
     decoder_cell = DecoderCell(
         NUM_UNITS,
+        encoder.embd,
         batch_size=BATCH_SIZE,
         embedding_dim=EMBEDDING_DIM,
         targ_vocab_size=len(word2idx)
@@ -258,7 +259,7 @@ if __name__ == '__main__':
                 grads = tape.gradient(loss, model_vars)
             optimizer.apply_gradients(zip(grads, model_vars))
 
-            if batch % 200 == 0:
+            if batch % 150 == 0:
                 sample_xs = random.sample(trainX, BATCH_SIZE)
                 sample_xs = maybe_pad_sentences(sample_xs)
                 h_b = encoder(
