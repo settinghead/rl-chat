@@ -204,11 +204,11 @@ class Seq2Seq(tf.keras.Model):
                     else:
                         new_dec_hidden = tf.reshape(dec_hidden_copy[i], (1, self.enc_units))
                         best_beam = self.bs.beam_search(new_input, new_dec_hidden)
-                        
+
                     label = best_beam.tokens[1]
                     labels.append(label)
                 dec_input = tf.expand_dims(labels, 1)
-                loss += self.loss_function(tf.convert_to_tensor(labels), predictions)
+                loss += self.loss_function(targ[:, t], predictions)
                 
             return loss
 
