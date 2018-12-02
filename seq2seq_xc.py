@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.layers import (
-    CuDNNLSTM, Dense, Embedding, RNN, LSTM
+    Dense, Embedding, RNN, LSTM, CuDNNLSTM
 )
 from tensorflow.keras import(
     Sequential
@@ -20,35 +20,66 @@ class Encoder(tf.keras.Model):
             batch_input_shape=[batch_size, None])
         self.lstm1 = CuDNNLSTM(
             num_units,
-            return_sequences=False,
-            return_state=True,
+            return_sequences=True,
+            return_state=False,
             # go_backwards=backwards
         )
+        self.lstm2 = CuDNNLSTM(
+            num_units,
+            return_sequences=True,
+            return_state=False
+        )
+        self.lstm3 = CuDNNLSTM(
+            num_units,
+            return_sequences=False,
+            return_state=True
+        )
 
-    def call(self, x_seq):
+    def call(self, x_seq, is_training):
         x = self.embd(x_seq)
-        _, c, m = self.lstm1(x)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
+        x = self.lstm1(x)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
+        x = self.lstm2(x)
+        if is_training:
+            x = tf.nn.dropout(x, 0.5)
+        _, c, m = self.lstm3(x)
         return (c, m)
 
 
 class DecoderCell(tf.keras.Model):
     def __init__(self, num_units, batch_size, embedding_dim, targ_vocab_size):
+        keep_prob = 0.5
         super(tf.keras.Model, self).__init__()
         self.embd = Embedding(
             targ_vocab_size, embedding_dim,
             batch_input_shape=[batch_size, None])
         self.lstm_cell1 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-            num_units
-        )
+            num_units)
+        self.lstm_cell2 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+            num_units)
+        self.lstm_cell3 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+            num_units)
         self.fc = Dense(targ_vocab_size, activation=None)
 
-    def call(self, y_at_t, cell_state):
+    def call(self, y_at_t, cell_state, is_training):
         x = self.embd(y_at_t)
         # print(x.shape, cell_state[0].shape)
         # print(y_at_t.shape, x.shape, cell_state[0].shape, cell_state[1].shape)
-        o, h = self.lstm_cell1(x, cell_state)
-        logits = self.fc(o)
-        return logits, h
+        h1, h2, h3 = cell_state
+        x, h1 = self.lstm_cell1(x, h1)
+        if is_training:
+            x, h1 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h1, 0.5)
+        x, h2 = self.lstm_cell2(x, h2)
+        if is_training:
+            x, h2 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h2, 0.5)
+        x, h3 = self.lstm_cell3(x, h3)
+        if is_training:
+            x, h3 = tf.nn.dropout(x, 0.5), tf.nn.dropout(h3, 0.5)
+        logits = self.fc(x)
+        return logits, (h1, h2, h3)
 
 
 import numpy as np
@@ -75,7 +106,7 @@ def load(model: tf.keras.Model, optimizer,
     saver.restore(folder)
 
 
-NUM_EPOCHS = 300
+NUM_EPOCHS = 100
 
 
 def cost_function(output, target, sl):
@@ -138,6 +169,10 @@ def batch(iterable, n=1):
         yield iterable[ndx:min(ndx + n, l)]
 
 
+def decode_sentence(word_idxs, idx2word):
+    return ' '.join([idx2word[w_idx] for w_idx in word_idxs if w_idx != 0])
+
+
 import random
 
 if __name__ == '__main__':
@@ -155,7 +190,7 @@ if __name__ == '__main__':
 
     word2idx = metadata['w2idx']   # dict  word 2 index
     idx2word = metadata['idx2w']   # list index 2 word
-    optimzer = tf.train.AdamOptimizer()
+    optimizer = tf.train.AdamOptimizer()
 
     encoder = Encoder(
         NUM_UNITS,
@@ -172,8 +207,8 @@ if __name__ == '__main__':
     )
 
     dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
-    for i in range(NUM_EPOCHS):
-        for batch, (x_batch, y_batch) in enumerate(dataset):
+    for epoch in range(NUM_EPOCHS):
+        for batch, (x_batch, y_batch) in enumerate(tqdm(dataset)):
             if(len(x_batch) != BATCH_SIZE):
                 continue
             with tf.GradientTape() as tape:
@@ -181,20 +216,28 @@ if __name__ == '__main__':
                 x_batch = maybe_pad_sentences(x_batch)
                 sl_b = [len(y) for y in y_batch]
                 y_batch = maybe_pad_sentences(y_batch)
-                cell_state_b = encoder(
-                    tf.convert_to_tensor(x_batch, dtype='float32')
+                h_b = encoder(
+                    tf.convert_to_tensor(x_batch, dtype='float32'), is_training=True
                 )
 
                 o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
                 logits_seq = []
                 for idx in range(y_batch.shape[1] + 1):
                     # use teacher forcing
-                    w_logits, cell_state_b = decoder_cell(o, cell_state_b)
-                    if(idx > 0):
-                        logits_seq.append(w_logits)
+                    cell_state_b = (
+                        h_b,
+                        decoder_cell.lstm_cell2.zero_state(
+                            BATCH_SIZE, dtype='float32'),
+                        decoder_cell.lstm_cell3.zero_state(
+                            BATCH_SIZE, dtype='float32'),
+                    )
+                    w_logits, cell_state_b = decoder_cell(
+                        o, cell_state_b, is_training=True
+                    )
 
                     if (idx < y_batch.shape[1]):
                         o = tf.convert_to_tensor(y_batch[:, idx])
+                        logits_seq.append(w_logits)
 
                 logits_seq = tf.transpose(
                     tf.convert_to_tensor(logits_seq), [1, 0, 2]
@@ -209,26 +252,43 @@ if __name__ == '__main__':
                 )
                 model_vars = encoder.variables + decoder_cell.variables
                 grads = tape.gradient(loss, model_vars)
-            optimzer.apply_gradients(zip(grads, model_vars))
+            optimizer.apply_gradients(zip(grads, model_vars))
 
-            if batch % 40 == 0:
-                sample_xs = random.sample(trainX, 32)
+            if batch % 200 == 0:
+                sample_xs = random.sample(trainX, BATCH_SIZE)
                 sample_xs = maybe_pad_sentences(sample_xs)
-                cell_state_b = encoder(
-                    tf.convert_to_tensor(sample_xs, dtype='float32')
+                h_b = encoder(
+                    tf.convert_to_tensor(sample_xs, dtype='float32'),
+                    is_training=False
                 )
                 outputs = []
+                o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
                 for idx in range(MAX_TOKENS_TARG):
                     # use teacher forcing
-                    w_logits, cell_state_b = decoder_cell(o, cell_state_b)
+                    cell_state_b = (
+                        h_b,
+                        decoder_cell.lstm_cell2.zero_state(
+                            BATCH_SIZE, dtype='float32'),
+                        decoder_cell.lstm_cell3.zero_state(
+                            BATCH_SIZE, dtype='float32'),
+                    )
+                    w_logits, cell_state_b = decoder_cell(
+                        o, cell_state_b, is_training=False)
                     o = tf.nn.softmax(w_logits)
                     o = tf.math.argmax(o, axis=-1)
                     outputs.append(o.numpy())
                 outputs = np.rollaxis(np.asarray(outputs), 0, 1)
                 outputs = [
-                    ' '.join([idx2word[w_idx] for w_idx in sentence])
+                    decode_sentence(sentence, idx2word)
                     for sentence in outputs
                 ]
-                print(random.sample(outputs, 5))
+                sample_pairs = random.sample(list(zip(sample_xs, outputs)), 5)
+                for q, a in sample_pairs:
+                    print("Q: ", decode_sentence(q, idx2word))
+                    print("A: ", a)
 
                 print("loss: ", loss.numpy())
+        if epoch % 5 == 0:
+            print("Saving models...")
+            save(encoder, optimizer, 'checkpoints/encoder')
+            save(decoder_cell, optimizer, 'checkpoints/decoder')
