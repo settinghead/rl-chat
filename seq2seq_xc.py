@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.layers import (
-    LSTMCell, LSTM, Dense, Embedding, RNN
+    CuDNNLSTM, Dense, Embedding, RNN
 )
 from tensorflow.keras import(
     Sequential
@@ -9,12 +9,12 @@ from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_L
 
 
 class Encoder(tf.keras.Model):
-    def __init__(self, num_units, backwards, batch_size, embedding_dim, max_seq_len, src_vocab_size):
+    def __init__(self, num_units, backwards, batch_size, embedding_dim, src_vocab_size):
         super(tf.keras.Model, self).__init__()
         self.embd = Embedding(
             src_vocab_size, embedding_dim,
             batch_input_shape=[batch_size, None])
-        self.lstm1 = LSTM(
+        self.lstm1 = CuDNNLSTM(
             num_units,
             return_sequences=False,
             return_state=True,
@@ -23,18 +23,29 @@ class Encoder(tf.keras.Model):
 
     def call(self, x_seq):
         x = self.embd(x_seq)
-        _, h, c = self.lstm1(x)
-        x = (h, c)
-        return x
+        _, c, m = self.lstm1(x)
+        return (c, m)
 
 
-def get_decoder_cell(num_units, max_seq_len, targ_vocab_size):
-    return Sequential([
-        LSTMCell(
-            num_units, input_shape=((1, targ_vocab_size)),
-        ),
-        Dense(targ_vocab_size, activation=None)
-    ])
+class DecoderCell(tf.keras.Model):
+    def __init__(self, num_units, batch_size, embedding_dim, targ_vocab_size):
+        super(tf.keras.Model, self).__init__()
+        self.embd = Embedding(
+            targ_vocab_size, embedding_dim,
+            batch_input_shape=[batch_size, None])
+        self.lstm_cell1 = tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
+            num_units
+        )
+        print(targ_vocab_size)
+        self.fc = Dense(targ_vocab_size, activation=None)
+
+    def call(self, y_at_t, cell_state):
+        x = self.embd(y_at_t)
+        # print(x.shape, cell_state[0].shape)
+        # print(y_at_t.shape, x.shape, cell_state[0].shape, cell_state[1].shape)
+        o, h = self.lstm_cell1(x, cell_state)
+        logits = self.fc(o)
+        return logits, h
 
 
 import numpy as np
@@ -169,12 +180,14 @@ if __name__ == '__main__':
         backwards=False,
         batch_size=BATCH_SIZE,
         embedding_dim=EMBEDDING_DIM,
-        max_seq_len=MAX_TOKENS_SRC,
         src_vocab_size=len(word2idx)
     )
-    # decoder = get_decoder_cell(
-    #     NUM_UNITS, MAX_TOKENS_TARG, len(word2idx)
-    # )
+    decoder_cell = DecoderCell(
+        NUM_UNITS,
+        batch_size=BATCH_SIZE,
+        embedding_dim=EMBEDDING_DIM,
+        targ_vocab_size=len(word2idx)
+    )
     BUFFER_SIZE = len(trainX)
 
     dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
@@ -183,4 +196,12 @@ if __name__ == '__main__':
         for batch, (x_batch, y_batch) in enumerate(dataset):
             x_batch = maybe_pad_sentences(x_batch)
             y_batch = maybe_pad_sentences(y_batch)
-            encoder(tf.convert_to_tensor(x_batch, dtype='float32'))
+            cell_state = encoder(
+                tf.convert_to_tensor(x_batch, dtype='float32')
+            )
+            o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
+            for idx in range(y_batch.shape[1] + 1):
+                # use teacher forcing
+                w_logits, cell_state = decoder_cell(o, cell_state)
+                if (idx < y_batch.shape[1]):
+                    o = tf.convert_to_tensor(y_batch[:, idx])
