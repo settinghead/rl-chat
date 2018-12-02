@@ -3,7 +3,14 @@ import nltk
 import itertools
 
 # space is included in whitelist
-EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]'
+
+BEGIN_TAG = "▶"
+END_TAG = "◀"
+EMPTY_TOKEN = "◌"
+
+
+EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]' + \
+    BEGIN_TAG + END_TAG + EMPTY_TOKEN
 EN_BLACKLIST = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~\''
 
 
