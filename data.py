@@ -17,13 +17,24 @@ def load_conv_text():
     return questions, answers
 
 
+MAX_LEN = 200
+
+
+def load_twitter_text():
+    with open('data/twitter/chat.txt') as f:
+        content = f.readlines()
+        pairs = [
+            (q.strip()[:MAX_LEN],
+             f"{BEGIN_TAG} {a.strip()[:MAX_LEN]} {END_TAG}")
+            for q, a in pairwise(content)
+        ]
+        return tuple(zip(*pairs))
+
+
 def pairwise(it):
     it = iter(it)
     while True:
         yield next(it), next(it)
-
-
-MAX_LEN = 130
 
 
 def load_opensubtitles_text():

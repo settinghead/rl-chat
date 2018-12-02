@@ -3,3 +3,4 @@ __pycache__
 /training_checkpoints
 /pretrained_models
 .ipynb_checkpoints
+/checkpoints

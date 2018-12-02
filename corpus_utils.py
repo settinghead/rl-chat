@@ -1,4 +1,10 @@
 from collections import defaultdict
+import nltk
+import itertools
+
+# space is included in whitelist
+EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]'
+EN_BLACKLIST = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~\''
 
 
 def tokenize_sentence(sentence):
@@ -12,6 +18,29 @@ def tokenize_sentence(sentence):
 
 EMPTY_IDX = 0
 UNKNOWN_IDX = 1
+VOCAB_SIZE = 10000
+limit = {
+    'maxq': 30,
+    'minq': 0,
+    'maxa': 30,
+    'mina': 3
+}
+
+
+def filter_line(line):
+    return ''.join([ch for ch in line if ch in EN_WHITELIST])
+
+
+def index_(tokenized_sentences, vocab_size, extra_vocab):
+    # get frequency distribution
+    freq_dist = nltk.FreqDist(itertools.chain(*tokenized_sentences))
+    # get vocabulary of 'vocab_size' most used words
+    vocab = freq_dist.most_common(vocab_size)
+    # index2word
+    index2word = extra_vocab + [x[0] for x in vocab]
+    # word2index
+    word2index = dict([(w, i) for i, w in enumerate(index2word)])
+    return index2word, word2index
 
 
 class LanguageIndex():
@@ -20,53 +49,10 @@ class LanguageIndex():
                  empty_token='<pad>',
                  unknown_token='<unk>'):
         self._tokenizer = tokenizer
-        self.samples = samples
         self.empty_token = empty_token
         self._unknown_token = unknown_token
-        self.word2idx = defaultdict(lambda: UNKNOWN_IDX)
-        self.idx2word = {}
-        self.create_index()
-
-    def create_index(self):
-        vocab = set()
-        for phrase in self.samples:
-            phrase = phrase.lower()
-            vocab.update(self._tokenizer(phrase))
-
-        sorted_vocab = sorted(vocab)
-
-        self.word2idx[self.empty_token] = EMPTY_IDX
-        self.word2idx[self._unknown_token] = UNKNOWN_IDX
-        prefix = [EMPTY_IDX, UNKNOWN_IDX]
-        for idx, w in enumerate(prefix):
-            self.idx2word[idx] = w
-        for index, word in enumerate(sorted_vocab):
-            self.word2idx[word] = len(prefix) + index
-
-        for word, index in self.word2idx.items():
-            self.idx2word[index] = word
-
-        self.vocab = prefix + sorted_vocab
-
-# class LanguageIndex():
-#     def __init__(self, samples, tokenizer=tokenize_sentence, empty_token='<pad>'):
-#         self._tokenizer = tokenizer
-#         self.samples = samples
-#         self.word2idx = {}
-#         self.idx2word = {}
-#         self.vocab = set()
-#         self._empty_token = empty_token
-#         self.create_index()
-
-#     def create_index(self):
-#         for phrase in self.samples:
-#             self.vocab.update(self._tokenizer(phrase))
-
-#         self.vocab = sorted(self.vocab)
-
-#         self.word2idx[self._empty_token] = 0
-#         for index, word in enumerate(self.vocab):
-#             self.word2idx[word] = index + 1
-
-#         for word, index in self.word2idx.items():
-#             self.idx2word[index] = word
+        self.idx2word, self.word2idx = index_(
+            [
+                tokenizer(s) for s in samples
+            ], VOCAB_SIZE, [unknown_token, empty_token]
+        )
