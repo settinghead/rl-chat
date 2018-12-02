@@ -78,17 +78,6 @@ def load(model: tf.keras.Model, optimizer,
 NUM_EPOCHS = 300
 
 
-# def train(encoder: Encoder, decoder: Decoder):
-#     x, y, sl, sos, w2i, i2w, i2e = get_data()
-#     optimzer = tf.train.AdamOptimizer()
-
-#     for _ in range(NUM_EPOCHS):
-#         for x_batch, y_batch, sl_batch in zip(x, y, sl):
-#             optimzer.minimize(lambda: get_loss(
-#                 encoder, decoder, x_batch, y_batch, sl_batch, sos)
-#             )
-
-
 def cost_function(output, target, sl):
     cross_entropy = target * tf.log(tf.clip_by_value(output, 1e-10, 1.0))
     cross_entropy = -tf.reduce_sum(cross_entropy, 2)
@@ -100,14 +89,6 @@ def cost_function(output, target, sl):
     return tf.reduce_mean(cross_entropy)
 
 
-# def get_loss(encoder: tf.keras.Model, decoder: tf.keras.Model, x, y, sl, sos):
-#     cell_state = encoder(x)
-
-#     _, wl = decoder(x, sos, cell_state, traning=True)
-#     loss = cost_function(wl, y, sl)
-#     return loss
-
-
 from data.twitter.data import load_data, split_dataset
 import copy
 
@@ -116,10 +97,6 @@ def remove_pad_sequences(sequences, pad_id=0):
     sequences_out = copy.deepcopy(sequences)
 
     for i, _ in enumerate(sequences):
-        # for j in range(len(sequences[i])):
-        #     if sequences[i][j] == pad_id:
-        #         sequences_out[i] = sequences_out[i][:j]
-        #         break
         for j in range(1, len(sequences[i])):
             if sequences[i][-j] != pad_id:
                 sequences_out[i] = sequences_out[i][0:-j + 1]
@@ -161,6 +138,8 @@ def batch(iterable, n=1):
         yield iterable[ndx:min(ndx + n, l)]
 
 
+import random
+
 if __name__ == '__main__':
     tf.enable_eager_execution()
     metadata, trainX, trainY, testX, testY, validX, validY = initial_setup()
@@ -193,15 +172,16 @@ if __name__ == '__main__':
     )
 
     dataset = list(zip(batch(trainX, BATCH_SIZE), batch(trainY, BATCH_SIZE)))
-    print(encoder.variables)
     for i in range(NUM_EPOCHS):
         for batch, (x_batch, y_batch) in enumerate(dataset):
+            if(len(x_batch) != BATCH_SIZE):
+                continue
             with tf.GradientTape() as tape:
 
                 x_batch = maybe_pad_sentences(x_batch)
                 sl_b = [len(y) for y in y_batch]
                 y_batch = maybe_pad_sentences(y_batch)
-                cell_state = encoder(
+                cell_state_b = encoder(
                     tf.convert_to_tensor(x_batch, dtype='float32')
                 )
 
@@ -209,7 +189,7 @@ if __name__ == '__main__':
                 logits_seq = []
                 for idx in range(y_batch.shape[1] + 1):
                     # use teacher forcing
-                    w_logits, cell_state = decoder_cell(o, cell_state)
+                    w_logits, cell_state_b = decoder_cell(o, cell_state_b)
                     if(idx > 0):
                         logits_seq.append(w_logits)
 
@@ -227,8 +207,28 @@ if __name__ == '__main__':
                     logits=logits_seq, targets=targets,
                     weights=masks
                 )
-                print("loss: ", loss.numpy())
-
                 model_vars = encoder.variables + decoder_cell.variables
                 grads = tape.gradient(loss, model_vars)
             optimzer.apply_gradients(zip(grads, model_vars))
+
+            if batch % 40 == 0:
+                sample_xs = random.sample(trainX, 32)
+                sample_xs = maybe_pad_sentences(sample_xs)
+                cell_state_b = encoder(
+                    tf.convert_to_tensor(sample_xs, dtype='float32')
+                )
+                outputs = []
+                for idx in range(MAX_TOKENS_TARG):
+                    # use teacher forcing
+                    w_logits, cell_state_b = decoder_cell(o, cell_state_b)
+                    o = tf.nn.softmax(w_logits)
+                    o = tf.math.argmax(o, axis=-1)
+                    outputs.append(o.numpy())
+                outputs = np.rollaxis(np.asarray(outputs), 0, 1)
+                outputs = [
+                    ' '.join([idx2word[w_idx] for w_idx in sentence])
+                    for sentence in outputs
+                ]
+                print(random.sample(outputs, 5))
+
+                print("loss: ", loss.numpy())
