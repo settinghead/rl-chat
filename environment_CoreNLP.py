@@ -14,9 +14,16 @@ import pdb
 CONVO_LEN = 1
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
-BEGIN_TAG = "▶ "
-END_TAG = " ◀"
-EMPTY_TOKEN = " ◌ "
+
+BEGIN_TAG = "<go>"
+END_TAG = "<eos>"
+EMPTY_TOKEN = "◌"
+
+'''
+BEGIN_TAG = "▶"
+END_TAG = "◀"
+EMPTY_TOKEN = "◌"
+'''
 
 
 def char_tokenizer(s: str):
@@ -50,6 +57,7 @@ class Environment:
         
         # state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
         next_state = ''.join(next_state)
+        next_state = ' ' + next_state + ' '
         next_state = f'{BEGIN_TAG}{next_state}{END_TAG}'
 
         self.history.append(next_state)
