@@ -3,9 +3,13 @@ import nltk
 import itertools
 
 # space is included in whitelist
-
+'''
 BEGIN_TAG = "▶"
 END_TAG = "◀"
+EMPTY_TOKEN = "◌"
+'''
+BEGIN_TAG = "<go>"
+END_TAG = "<eos>"
 EMPTY_TOKEN = "◌"
 
 
