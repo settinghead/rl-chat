@@ -2,7 +2,7 @@ import random
 import string
 import tensorflow as tf
 import numpy as np
-import encoder_decoder as encoder_decoder
+import seq2seq as seq2seq
 import data
 from corpus_utils import LanguageIndex, tokenize_sentence
 
@@ -25,7 +25,7 @@ def load_trained_model(batch_size, embedding_dim, units, optimizer):
     checkpoint_dir = './training_checkpoints'
     vocab_inp_size = len(inp_lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
-    model = encoder_decoder.Seq2Seq(
+    model = seq2seq.Seq2Seq(
         vocab_inp_size, vocab_tar_size, embedding_dim, units, batch_size, inp_lang, targ_lang)
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
     # restoring the latest checkpoint in checkpoint_dir
