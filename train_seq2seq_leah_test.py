@@ -9,11 +9,12 @@ from corpus_utils import LanguageIndex, tokenize_sentence, EMPTY_IDX
 import data
 from sklearn.model_selection import train_test_split
 from embedding_utils import get_embedding_dim
+from seq2seq import TEACHER_FORCING, BASIC, BEAM_SEARCH
 
 if __name__ == "__main__":
     tf.enable_eager_execution()
 
-    USE_GLOVE = True
+    USE_GLOVE = False
 
     # why not both?
     questions1, answers1 = data.load_conv_text()
@@ -37,7 +38,7 @@ if __name__ == "__main__":
     vocab_tar_size = len(targ_lang.word2idx)
 
     optimizer = tf.train.AdamOptimizer()
-    EPOCHS = 1000
+    EPOCHS = 1000000
 
     input_tensor = [[inp_lang.word2idx[token] for token in tokenize_sentence(
         question)] for question in questions]
@@ -72,16 +73,17 @@ if __name__ == "__main__":
         (input_tensor_val, target_tensor_val)).shuffle(EVAL_BUFFER_SIZE)
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
-    
-    # model: encoder_decoder.Seq2Seq = utils.load_trained_model(
-    #      BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
-    
+    '''
+    model: encoder_decoder.Seq2Seq = utils.load_trained_model(
+         BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
+    '''
     model = seq2seq.Seq2Seq(
         vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, units, BATCH_SIZE,
         inp_lang=inp_lang, targ_lang=targ_lang,max_length_tar=max_length_tar,
-        use_GloVe=USE_GLOVE
+        use_GloVe=USE_GLOVE,
+        mode=BASIC,
+        use_bilstm=True
     )
-    
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -93,7 +95,7 @@ if __name__ == "__main__":
         eval_total_loss = seq2seq.evaluate(model, val_dataset)
         # saving (checkpoint) the model every 100 epochs
         if (epoch + 1) % 100 == 0:
-            #checkpoint.save(file_prefix=checkpoint_prefix)
+            checkpoint.save(file_prefix=checkpoint_prefix)
 
             print('Time taken for epoch {}: {} sec\n'.format(
                 epoch, time.time() - start)
