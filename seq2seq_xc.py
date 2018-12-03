@@ -119,7 +119,7 @@ def load(model: tf.keras.Model, optimizer,
     saver.restore(folder)
 
 
-NUM_EPOCHS = 100
+NUM_EPOCHS = 10000
 
 
 import copy
@@ -175,11 +175,11 @@ if __name__ == '__main__':
     tf.enable_eager_execution()
     # metadata, trainX, trainY = load_data(PATH='data/twitter/')
     # why not both?
-    questions1, answers1 = load_conv_text()
-    questions2, answers2 = load_twitter_text()
-    questions = list(questions1) + list(questions2)
-    answers = list(answers1) + list(answers2)
-    # questions, answers = data.load_conv_text()
+    # questions1, answers1 = load_conv_text()
+    # questions2, answers2 = load_twitter_text()
+    # questions = list(questions1) + list(questions2)
+    # answers = list(answers1) + list(answers2)
+    questions, answers = load_conv_text()
 
     questions = [filter_line(q) for q in questions]
     answers = [filter_line(a) for a in answers]
@@ -231,7 +231,6 @@ if __name__ == '__main__':
                 o = tf.convert_to_tensor([0] * BATCH_SIZE, dtype='float32')
                 logits_seq = []
                 for idx in range(y_batch.shape[1] + 1):
-                    # use teacher forcing
                     # cell_state_b = (
                     #     h_b,
                     #     decoder_cell.lstm_cell2.zero_state(
@@ -240,6 +239,7 @@ if __name__ == '__main__':
                     #         BATCH_SIZE, dtype='float32'),
                     # )
                     cell_state_b = h_b
+                    # use teacher forcing
                     w_logits, cell_state_b = decoder_cell(
                         o, cell_state_b, is_training=True
                     )
@@ -263,7 +263,7 @@ if __name__ == '__main__':
                 grads = tape.gradient(loss, model_vars)
             optimizer.apply_gradients(zip(grads, model_vars))
 
-            if batch % 100 == 0:
+            if batch % 1000 == 0:
                 sample_xs = random.sample(trainX, BATCH_SIZE)
                 sample_xs = maybe_pad_sentences(sample_xs)
                 h_b = encoder(

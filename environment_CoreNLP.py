@@ -14,9 +14,9 @@ import pdb
 CONVO_LEN = 1
 MIN_UTTERANCE_LEN = 4
 MAX_UTTERANCE_LEN = 20
-BEGIN_TAG = "▶ "
-END_TAG = " ◀"
-EMPTY_TOKEN = " ◌ "
+
+
+from data import BEGIN_TAG, END_TAG, EMPTY_TOKEN, UNK_TOKEN
 
 
 def char_tokenizer(s: str):
@@ -31,11 +31,13 @@ class Environment:
 
     def __init__(self):
         self.reset()
-        self._questions, _ = data.load_conv_text() #TO DO: this should be a new test list of questions, assuming pretrained with conv()
+        # TO DO: this should be a new test list of questions, assuming pretrained with conv()
+        self._questions, self._answers = data.load_conv_text()
         self._lang = LanguageIndex(
-            [f"{BEGIN_TAG}{END_TAG}"] + self._questions,
+            self._questions + self._answers,
             #tokenizer=lambda s: list(s),
-            empty_token=EMPTY_TOKEN
+            empty_token=EMPTY_TOKEN,
+            unknown_token=UNK_TOKEN
         )
         self.stanford = StanfordCoreNLP('http://localhost:9000')
         #self.stanford = StanfordCoreNLP('http://127.0.0.1:9000')
@@ -43,14 +45,15 @@ class Environment:
 
     def step(self, action):
         reward = self.calc_reward(action)
-        done = len(self.history) >= CONVO_LEN #Present, but NOT USED
+        done = len(self.history) >= CONVO_LEN  # Present, but NOT USED
         self.history.append(action)
 
-        next_state = random.sample(self._questions, 1)[0] #<------- TO DO: decide if randomly sampled!
-        
+        # <------- TO DO: decide if randomly sampled!
+        next_state = random.sample(self._questions, 1)[0]
+
         # state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
         next_state = ''.join(next_state)
-        next_state = f'{BEGIN_TAG}{next_state}{END_TAG}'
+        next_state = f'{BEGIN_TAG} {next_state} {END_TAG}'
 
         self.history.append(next_state)
 
@@ -73,7 +76,7 @@ class Environment:
         # negative: 1; # neutral: 2; positive: 3
         s_scores = [int(s['sentimentValue']) - 2 for s in result['sentences']]
         reward = math.tanh(sum(s_scores))
-        
+
         return reward
 
 
@@ -84,7 +87,7 @@ if __name__ == "__main__":
     done = False
     action = "I love you!"
     state = ""
-        # action = "hello"
+    # action = "hello"
     prev_state = state
     state, reward, done = env.step(action)
     print(f"env: {prev_state} -> bot: {action} reward: {reward}")

@@ -23,4 +23,4 @@ def get_embedding_dim(use_glove: bool):
         return 100
     else:
         # 256 if without pretrained embedding
-        return 256
+        return 100

@@ -7,6 +7,7 @@ import time
 import utils
 from corpus_utils import LanguageIndex, tokenize_sentence, EMPTY_IDX
 import data
+from data import BEGIN_TAG, END_TAG, EMPTY_TOKEN, UNK_TOKEN
 from sklearn.model_selection import train_test_split
 from embedding_utils import get_embedding_dim
 
@@ -22,8 +23,15 @@ if __name__ == "__main__":
     questions = list(questions1) + list(questions2)
     answers = list(answers1) + list(answers2)
     # questions, answers = data.load_conv_text()
-    inp_lang = LanguageIndex(questions)
-    targ_lang = LanguageIndex(answers)
+    inp_lang = LanguageIndex(
+        questions + answers,
+        empty_token=EMPTY_TOKEN, unknown_token=UNK_TOKEN
+    )
+    targ_lang = inp_lang
+    # targ_lang = LanguageIndex(
+    #     answers,
+    #     empty_token=EMPTY_TOKEN, unknown_token=UNK_TOKEN
+    # )
 
     BATCH_SIZE = 32
 
@@ -72,19 +80,15 @@ if __name__ == "__main__":
         (input_tensor_val, target_tensor_val)).shuffle(EVAL_BUFFER_SIZE)
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
-    
-    # model: encoder_decoder.Seq2Seq = utils.load_trained_model(
-    #      BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
-    
+
     model = encoder_decoder.Seq2Seq(
         vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, units, BATCH_SIZE,
         inp_lang=inp_lang, targ_lang=targ_lang,
         max_length_tar=max_length_tar,
         use_GloVe=USE_GLOVE,
         display_result=True,
-        use_beam_search=True
+        use_beam_search=False
     )
-    
 
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
@@ -95,8 +99,10 @@ if __name__ == "__main__":
         train_total_loss = encoder_decoder.train(model, optimizer, dataset)
         eval_total_loss = encoder_decoder.evaluate(model, val_dataset)
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 100 == 0:
-            #checkpoint.save(file_prefix=checkpoint_prefix)
+        print("Epoch: ", epoch)
+        if (epoch + 1) % 50 == 0:
+            print("Saving...")
+            checkpoint.save(file_prefix=checkpoint_prefix)
 
             print('Time taken for epoch {}: {} sec\n'.format(
                 epoch, time.time() - start)

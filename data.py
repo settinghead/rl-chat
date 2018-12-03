@@ -1,12 +1,13 @@
-BEGIN_TAG = "▶ "
-END_TAG = " ◀"
-EMPTY_TOKEN = " ◌ "
+BEGIN_TAG = "▶"
+END_TAG = "◀"
+EMPTY_TOKEN = "◌"
+UNK_TOKEN = "<unk>"
 
 
 def load_conv_text():
     questions = []
     answers = []
-    with open('conv.txt') as f:
+    with open('conv2.txt') as f:
         for line in f:
             question_answer_pair = line.split("||")
             question = question_answer_pair[0].strip()

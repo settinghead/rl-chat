@@ -15,13 +15,16 @@ import math
 
 # TODO: sample from a bigger source
 sentences = [
-    'hello. is anyone there?',
-    'i am a tree and you are a bird.',
-    "the world is spinning so fast i'm buying new nike shoes.",
-    'i hate everyone.',
-    "i'm glad it works",
-    "i love you",
-    "This is fantastic! Excellent! It's awesome!"
+    # 'hello. is anyone there?',
+    # 'i am a tree and you are a bird.',
+    # "the world is spinning so fast i'm buying new nike shoes.",
+    # 'i hate everyone.',
+    # "i'm glad it works",
+    # "i love you",
+    # "This is fantastic! Excellent! It's awesome!"
+    "It's in good California.",
+    "It's in California.",
+    "I live in bad Pasadena."
 ]
 
 

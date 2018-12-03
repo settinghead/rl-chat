@@ -4,14 +4,13 @@ import itertools
 
 # space is included in whitelist
 
-BEGIN_TAG = "▶"
-END_TAG = "◀"
-EMPTY_TOKEN = "◌"
+# BEGIN_TAG = "▶"
+# END_TAG = "◀"
+# EMPTY_TOKEN = "◌"
 
 
-EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]' + \
-    BEGIN_TAG + END_TAG + EMPTY_TOKEN
-EN_BLACKLIST = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~\''
+# EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]' + \
+#     EN_BLACKLIST = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~\''
 
 
 def tokenize_sentence(sentence):
@@ -34,8 +33,8 @@ limit = {
 }
 
 
-def filter_line(line):
-    return ''.join([ch for ch in line if ch in EN_WHITELIST])
+def filter_line(line, whitelist):
+    return ''.join([ch for ch in line if ch in whitelist])
 
 
 def index_(tokenized_sentences, vocab_size, extra_vocab):
@@ -51,10 +50,12 @@ def index_(tokenized_sentences, vocab_size, extra_vocab):
 
 
 class LanguageIndex():
-    def __init__(self, samples,
-                 tokenizer=tokenize_sentence,
-                 empty_token='<pad>',
-                 unknown_token='<unk>'):
+    def __init__(
+        self, samples,
+        empty_token,
+        unknown_token,
+        tokenizer=tokenize_sentence,
+    ):
         self._tokenizer = tokenizer
         self.empty_token = empty_token
         self._unknown_token = unknown_token

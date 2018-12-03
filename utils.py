@@ -16,11 +16,13 @@ def max_length(tensor):
     return max(len(t) for t in tensor)
 
 
-def load_trained_model(batch_size, embedding_dim, units, optimizer):
+def load_trained_model(batch_size, embedding_dim, units, optimizer, empty_token, unknown_token):
     questions, answers = data.load_conv_text()
 
-    inp_lang = LanguageIndex(questions)
-    targ_lang = LanguageIndex(answers)
+    inp_lang = LanguageIndex(
+        questions, empty_token=empty_token, unknown_token=unknown_token)
+    targ_lang = LanguageIndex(
+        answers, empty_token=empty_token, unknown_token=unknown_token)
 
     checkpoint_dir = './training_checkpoints'
     vocab_inp_size = len(inp_lang.word2idx)
