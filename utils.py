@@ -28,7 +28,10 @@ def load_trained_model(batch_size, embedding_dim, units, optimizer, empty_token,
     vocab_inp_size = len(inp_lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
     model = seq2seq.Seq2Seq(
-        vocab_inp_size, vocab_tar_size, embedding_dim, units, batch_size, inp_lang, targ_lang)
+        vocab_inp_size, vocab_tar_size, embedding_dim, units, batch_size, inp_lang, targ_lang,
+        use_GloVe=True,
+        mode=seq2seq.BASIC,
+        use_bilstm=True)
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
     # restoring the latest checkpoint in checkpoint_dir
     checkpoint.restore(tf.train.latest_checkpoint(checkpoint_dir))

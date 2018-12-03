@@ -14,7 +14,7 @@ from seq2seq import TEACHER_FORCING, BASIC, BEAM_SEARCH
 if __name__ == "__main__":
     tf.enable_eager_execution()
 
-    USE_GLOVE = False
+    USE_GLOVE = True
 
     # why not both?
     questions1, answers1 = data.load_conv_text()
@@ -73,9 +73,9 @@ if __name__ == "__main__":
         (input_tensor_val, target_tensor_val)).shuffle(EVAL_BUFFER_SIZE)
     val_dataset = val_dataset.batch(BATCH_SIZE, drop_remainder=True)
     N_BATCH = BUFFER_SIZE // BATCH_SIZE
-    '''
-    model: encoder_decoder.Seq2Seq = utils.load_trained_model(
-         BATCH_SIZE, embedding_dim, units, tf.train.AdamOptimizer())
+    
+    model: seq2seq.Seq2Seq = utils.load_trained_model(
+         BATCH_SIZE, EMBEDDING_DIM, units, tf.train.AdamOptimizer())
     '''
     model = seq2seq.Seq2Seq(
         vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, units, BATCH_SIZE,
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         mode=BASIC,
         use_bilstm=True
     )
-
+    '''
     checkpoint_dir = './training_checkpoints'
     checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
     checkpoint = tf.train.Checkpoint(optimizer=optimizer, seq2seq=model)
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         train_total_loss = seq2seq.train(model, optimizer, dataset)
         eval_total_loss = seq2seq.evaluate(model, val_dataset)
         # saving (checkpoint) the model every 100 epochs
-        if (epoch + 1) % 100 == 0:
+        if (epoch + 1) % 10 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
             print('Time taken for epoch {}: {} sec\n'.format(

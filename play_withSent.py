@@ -6,23 +6,26 @@ import pdb
 
 import numpy as np
 from itertools import count
-from encoder_decoder import Encoder, Decoder
-from environment_CoreNLP import Environment, BEGIN_TAG, END_TAG, CONVO_LEN
-from corpus_utils import tokenize_sentence
+from seq2seq import Encoder, Decoder
+from environment_CoreNLP import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 from agent import Baseline
 import data
 import random
+<< << << < HEAD
 
 from encoder_decoder import Seq2Seq
+== == == =
+>>>>>> > 27924ef8c8f062b0018ce5b8fef436f0dc341c3f
 from utils import load_trained_model, max_length
 from sklearn.metrics.pairwise import cosine_similarity
+from corpus_utils import tokenize_sentence
 
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 GAMMA = 1
 USE_GLOVE = True
 if USE_GLOVE:
@@ -61,6 +64,7 @@ def maybe_pad_sentence(s):
 
 
 def main():
+
     env = Environment()
     # print(env.lang.word2idx)
 
@@ -82,6 +86,19 @@ def main():
 
     l_optimizer = tf.train.AdamOptimizer()
     bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+
+    # LOAD PRETRAINED MODEL HERE
+    # For now...
+    model = load_trained_model(
+        BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
+    encoder = model.encoder
+    decoder = model.decoder
+    '''
+    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
+                      UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
+    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
+                      UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
+    '''
 
     model = Seq2Seq(
         vocab_inp_size, vocab_tar_size, EMBEDDING_DIM, UNITS, BATCH_SIZE,
@@ -128,11 +145,13 @@ def main():
         while not done:  # NOT REALLY USING DONE (Conv_length=1)
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
+
             init_hidden = initialize_hidden_state(1, UNITS)
             state_inp = [env.lang.word2idx[token]
                          for token in tokenize_sentence(state)]
             enc_hidden = encoder(
                 tf.convert_to_tensor([state_inp]), init_hidden)
+
             dec_hidden = enc_hidden
 
             w = BEGIN_TAG

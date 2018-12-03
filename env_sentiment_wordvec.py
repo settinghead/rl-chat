@@ -24,7 +24,8 @@ CONVO_LEN = 15
 class PoorMansSentimentEnvrionment:
     def __init__(self, targ_lang: LanguageIndex, by_word: bool = False):
         targ_lang_embd = get_GloVe_embeddings(targ_lang.vocab, EMBEDDING_DIM)
-        pos_pairwise_sim_scores = np.dot(targ_lang_embd, pos_sentimental_words_embd.transpose())  / len(pos_sentimental_words) * 100
+        #pos_pairwise_sim_scores = np.dot(targ_lang_embd, pos_sentimental_words_embd.transpose())  / len(pos_sentimental_words) * 100
+        self.pos_pairwise_sim_scores = cosine_similarity(targ_lang_embd, pos_sentimental_words_embd)
         # neg_pairwise_sim_scores = np.dot(neg_sentimental_words_embd, np.transpose(targ_lang_embd)) / len(neg_sentimental_words) * 100
         self.targ_lang = targ_lang
         self.by_word = by_word
@@ -65,6 +66,11 @@ if __name__ == "__main__":
     targ_lang = LanguageIndex(answers)
 
     env = PoorMansSentimentEnvrionment(targ_lang, by_word=False)
+    
+    # testing positive scores
+    print(env.calc_reward_w("good"))
+    print(env.calc_reward_w("excellent"))
+    
     words = ["good", "excellent", "sad", "dog", "fantastic", "meh", "party", "death", "disease"]
     print([(w, (env.sentiment_scores[env.targ_lang.word2idx[w]])) for w in words])
     done = False
@@ -74,3 +80,4 @@ if __name__ == "__main__":
         state, reward, done = env.step(action)
         print(f"bot: {action} reward: {reward}")
         prev_state = state
+    

@@ -142,7 +142,7 @@ class Seq2Seq(tf.keras.Model):
         batch_sz,
         inp_lang,
         targ_lang,
-        max_length_tar,
+        max_length_tar=100,
         use_GloVe=False,
         mode=BEAM_SEARCH,
         use_bilstm = False,
@@ -257,8 +257,8 @@ def evaluate(model: Seq2Seq, eval_dataset):
                 result += model.targ_lang.idx2word[predicted_id] + ' '
                 if model.targ_lang.idx2word[predicted_id] == END_TAG:
                     print("result: ", result.replace(END_TAG, ""))
-                else:
-                    print(result)
+                #else:
+                #    print(result)
                 dec_input = tf.expand_dims([predicted_id] * model.batch_sz, 1)
     return total_loss
 
