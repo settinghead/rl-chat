@@ -6,23 +6,22 @@ import pdb
 
 import numpy as np
 from itertools import count
-from encoder_decoder import Encoder, Decoder
-from environment_CoreNLP import Environment, BEGIN_TAG, END_TAG, CONVO_LEN
-from corpus_utils import tokenize_sentence
+from seq2seq import Encoder, Decoder
+from environment_CoreNLP import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
 from agent import Baseline
 import data
 import random
-
 from utils import load_trained_model, max_length
 from embedding_utils import get_embedding_dim, get_GloVe_embeddings
 from sklearn.metrics.pairwise import cosine_similarity
+from corpus_utils import tokenize_sentence
 
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
 EPISODES = 10000
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 GAMMA = 1
 USE_GLOVE = True
 if USE_GLOVE:
@@ -32,7 +31,7 @@ else:
     # 256 if without pretrained embedding
     EMBEDDING_DIM = 32
 
-UNITS = 512
+UNITS = 128
 
 MAX_TARGET_LEN = 20  # TODO: hack
 
@@ -58,6 +57,7 @@ def maybe_pad_sentence(s):
 
 
 def main():
+
     env = Environment()
     # print(env.lang.word2idx)
 
@@ -71,21 +71,25 @@ def main():
 
     #GET WORD SCORES
     # sentimental_words = ["absolutely","abundant","accept","acclaimed","accomplishment","achievement","action","active","activist","acumen","adjust","admire","adopt","adorable","adored","adventure","affirmation","affirmative","affluent","agree","airy","alive","alliance","ally","alter","amaze","amity","animated","answer","appreciation","approve","aptitude","artistic","assertive","astonish","astounding","astute","attractive","authentic","basic","beaming","beautiful","believe","benefactor","benefit","bighearted","blessed","bliss","bloom","bountiful","bounty","brave","bright","brilliant","bubbly","bunch","burgeon","calm","care","celebrate","certain","change","character","charitable","charming","cheer","cherish","clarity","classy","clean","clever","closeness","commend","companionship","complete","comradeship","confident","connect","connected","constant","content","conviction","copious","core","coupled","courageous","creative","cuddle","cultivate","cure","curious","cute","dazzling","delight","direct","discover","distinguished","divine","donate","each","day","eager","earnest","easy","ecstasy","effervescent","efficient","effortless","electrifying","elegance","embrace","encompassing","encourage","endorse","energized","energy","enjoy","enormous","enthuse","enthusiastic","entirely","essence","established","esteem","everyday","everyone","excited","exciting","exhilarating","expand","explore","express","exquisite","exultant","faith","familiar","family","famous","feat","fit","flourish","fortunate","fortune","freedom","fresh","friendship","full","funny","gather","generous","genius","genuine","give","glad","glow","good","gorgeous","grace","graceful","gratitude","green","grin","group","grow","handsome","happy","harmony","healed","healing","healthful","healthy","heart","hearty","heavenly","helpful","here","highest","good","hold","holy","honest","honor","hug","i","affirm","i","allow","i","am","willing","i","am.","i","can","i","choose","i","create","i","follow","i","know","i","know,","without","a","doubt","i","make","i","realize","i","take","action","i","trust","idea","ideal","imaginative","increase","incredible","independent","ingenious","innate","innovate","inspire","instantaneous","instinct","intellectual","intelligence","intuitive","inventive","joined","jovial","joy","jubilation","keen","key","kind","kiss","knowledge","laugh","leader","learn","legendary","let","go","light","lively","love","loveliness","lucidity","lucrative","luminous","maintain","marvelous","master","meaningful","meditate","mend","metamorphosis","mind-blowing","miracle","mission","modify","motivate","moving","natural","nature","nourish","nourished","novel","now","nurture","nutritious","one","open","openhanded","optimistic","paradise","party","peace","perfect","phenomenon","pleasure","plenteous","plentiful","plenty","plethora","poise","polish","popular","positive","powerful","prepared","pretty","principle","productive","project","prominent","prosperous","protect","proud","purpose","quest","quick","quiet","ready","recognize","refinement","refresh","rejoice","rejuvenate","relax","reliance","rely","remarkable","renew","renowned","replenish","resolution","resound","resources","respect","restore","revere","revolutionize","rewarding","rich","robust","rousing","safe","secure","see","sensation","serenity","shift","shine","show","silence","simple","sincerity","smart","smile","smooth","solution","soul","sparkling","spirit","spirited","spiritual","splendid","spontaneous","still","stir","strong","style","success","sunny","support","sure","surprise","sustain","synchronized","team","thankful","therapeutic","thorough","thrilled","thrive","today","together","tranquil","transform","triumph","trust","truth","unity","unusual","unwavering","upbeat","value","vary","venerate","venture","very","vibrant","victory","vigorous","vision","visualize","vital","vivacious","voyage","wealthy","welcome","well","whole","wholesome","willing","wonder","wonderful","wondrous","xanadu","yes","yippee","young","youth","youthful","zeal","zest","zing","zip"]
-    sentimental_words = ["good", "excellent", "well"]
+    sentimental_words = ["good", "bad", "well"]
     targ_lang_embd = get_GloVe_embeddings(targ_lang.vocab, EMBEDDING_DIM)
     sentimental_words_embd = get_GloVe_embeddings(
         sentimental_words, EMBEDDING_DIM)
-    sim_scores = np.dot(sentimental_words_embd, np.transpose(targ_lang_embd))
-    #print(sim_scores.shape)
-    
-    
+    sim_scores = cosine_similarity(sentimental_words_embd, targ_lang_embd)
+    print(sim_scores.shape)
     
     #LOAD PRETRAINED MODEL HERE
     #For now...
+    model = load_trained_model(
+         BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
+    encoder = model.encoder
+    decoder = model.decoder
+    '''
     encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
+    '''
 
 
     baseline = Baseline(UNITS)
@@ -107,12 +111,15 @@ def main():
         while not done:  #NOT REALLY USING DONE (Conv_length=1)
 
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
+            
             init_hidden = initialize_hidden_state(1, UNITS)
             state_inp = [env.lang.word2idx[token]
                          for token in tokenize_sentence(state)]
             enc_hidden = encoder(
                 tf.convert_to_tensor([state_inp]), init_hidden)
+            
             dec_hidden = enc_hidden
+            
 
             w = BEGIN_TAG
             curr_w_enc = tf.expand_dims(
