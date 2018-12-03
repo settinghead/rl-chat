@@ -11,11 +11,7 @@ from environment_CoreNLP import Environment, char_tokenizer, BEGIN_TAG, END_TAG,
 from agent import Baseline
 import data
 import random
-<< << << < HEAD
-
 from encoder_decoder import Seq2Seq
-== == == =
->>>>>> > 27924ef8c8f062b0018ce5b8fef436f0dc341c3f
 from utils import load_trained_model, max_length
 from sklearn.metrics.pairwise import cosine_similarity
 from corpus_utils import tokenize_sentence
@@ -84,15 +80,13 @@ def main():
     # sim_scores = np.dot(sentimental_words_embd, np.transpose(targ_lang_embd))
     # print(sim_scores.shape)
 
-    l_optimizer = tf.train.AdamOptimizer()
-    bl_optimizer = tf.train.RMSPropOptimizer(0.01)
+    l_optimizer = tf.train.RMSPropOptimizer(0.001)
+    bl_optimizer = tf.train.RMSPropOptimizer(0.001)
 
     # LOAD PRETRAINED MODEL HERE
     # For now...
-    model = load_trained_model(
-        BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
-    encoder = model.encoder
-    decoder = model.decoder
+    # model = load_trained_model(
+    #     BATCH_SIZE, EMBEDDING_DIM, UNITS, tf.train.AdamOptimizer())
     '''
     encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
@@ -133,6 +127,8 @@ def main():
     l_optimizer = tf.train.AdamOptimizer()
     bl_optimizer = tf.train.RMSPropOptimizer(0.01)
     batch = None
+    avg_rewards = []
+    avg_losses = []
 
     for episode in range(EPISODES):
 
@@ -216,7 +212,10 @@ def main():
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
-            ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            if ret_std == 0:
+                ret_seq_b = ret_seq_b - ret_mean
+            else:
+                ret_seq_b = (ret_seq_b - ret_mean) / ret_std
 
             ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
 
@@ -305,10 +304,17 @@ def main():
                 "all returns: min=%f, max=%f, median=%f" %
                 (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
             )
-            print("avg reward: ", sum(reward_b) / len(reward_b))
-            print("avg loss: ", tf.reduce_mean(loss).numpy())
+            avg_reward = sum(reward_b) / len(reward_b)
+            avg_rewards.append(avg_reward)
+            print("avg reward: ", avg_reward)
+            avg_loss = tf.reduce_mean(loss).numpy()
+            print("avg loss: ", avg_loss)
+            avg_losses.append(avg_loss)
             print("avg grad: ", np.mean(grads[1].numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
+        if episode % 200 == 0 and batch != None:
+            print("Avg rewards: ", avg_rewards)
+            print("Avg losses:", avg_losses)
 
 
 main()
