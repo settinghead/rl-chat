@@ -20,6 +20,7 @@ sentences = [
     "the world is spinning so fast i'm buying new nike shoes.",
     'i hate everyone.',
     "i'm glad it works",
+    "i love you",
     "This is fantastic! Excellent! It's awesome!"
 ]
 

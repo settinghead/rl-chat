@@ -1,8 +1,6 @@
-
-
-BEGIN_TAG = "▶"
-END_TAG = "◀"
-EMPTY_TOKEN = "◌"
+BEGIN_TAG = "▶ "
+END_TAG = " ◀"
+EMPTY_TOKEN = " ◌ "
 
 
 def load_conv_text():

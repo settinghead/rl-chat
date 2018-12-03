@@ -7,7 +7,8 @@ import pdb
 import numpy as np
 from itertools import count
 from encoder_decoder import Encoder, Decoder
-from environment_CoreNLP import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
+from environment_CoreNLP import Environment, BEGIN_TAG, END_TAG, CONVO_LEN
+from corpus_utils import tokenize_sentence
 from agent import Baseline
 import data
 import random
@@ -46,7 +47,7 @@ def get_returns(r: float, seq_len: int):
 
 def sentence_to_idxs(sentence: str):
     return [env.lang.word2idx[token]
-            for token in char_tokenizer(sentence)]
+            for token in tokenize_sentence(sentence)]
 
 def maybe_pad_sentence(s):
     return tf.keras.preprocessing.sequence.pad_sequences(
@@ -75,7 +76,7 @@ def main():
     sentimental_words_embd = get_GloVe_embeddings(
         sentimental_words, EMBEDDING_DIM)
     sim_scores = np.dot(sentimental_words_embd, np.transpose(targ_lang_embd))
-    print(sim_scores.shape)
+    #print(sim_scores.shape)
     
     
     
@@ -95,10 +96,8 @@ def main():
     bl_optimizer = tf.train.RMSPropOptimizer(0.01)
     batch = None
 
-    
-    
-
     for episode in range(EPISODES):
+
         # Start of Episode
         env.reset()
 
@@ -110,16 +109,17 @@ def main():
             # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
             init_hidden = initialize_hidden_state(1, UNITS)
             state_inp = [env.lang.word2idx[token]
-                         for token in char_tokenizer(state)]
+                         for token in tokenize_sentence(state)]
             enc_hidden = encoder(
                 tf.convert_to_tensor([state_inp]), init_hidden)
             dec_hidden = enc_hidden
 
             w = BEGIN_TAG
             curr_w_enc = tf.expand_dims(
-                [targ_lang.word2idx[w]], 0
+                [targ_lang.word2idx[tokenize_sentence(w)[0]]], 0
             )
 
+            #pdb.set_trace() ######################################################################################
 
             outputs = []
             actions = []
@@ -142,9 +142,10 @@ def main():
                 outputs.append(w)
 
             # action is a sentence (string)
-            action_str = ''.join(outputs)
+            action_str = ' '.join(outputs)
             next_state, reward, done = env.step(action_str)
-            history.append((state, actions, action_str, reward+words_score)) #Reward is sentence score + words score
+            #pdb.set_trace() ######################################################################################
+            history.append((state, actions, action_str, reward+0*words_score)) #Reward is sentence score + words score. For now, words score is NOT USED
             state = next_state
 
             #pdb.set_trace() ######################################################################################
@@ -197,7 +198,7 @@ def main():
                 prev_w_idx_b = tf.expand_dims(
                     tf.cast(
                         tf.convert_to_tensor(
-                            [env.lang.word2idx[BEGIN_TAG]] * BATCH_SIZE),
+                            [env.lang.word2idx[tokenize_sentence(BEGIN_TAG)[0]]] * BATCH_SIZE),
                         'float32'
                     ), -1
                 )
@@ -237,7 +238,7 @@ def main():
 
             # calculate cumulative gradients
 
-            pdb.set_trace() ######################################################################################
+            #pdb.set_trace() ######################################################################################
 
             model_vars = encoder.variables + decoder.variables
             grads = l_tape.gradient(loss, model_vars)
