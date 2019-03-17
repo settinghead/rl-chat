@@ -12,6 +12,7 @@ MAX_UTTERANCE_LEN = 20
 BEGIN_TAG = "▶"
 END_TAG = "◀"
 EMPTY_TOKEN = "◌"
+UNKNOWN_TOKEN = "♡"
 
 
 def char_tokenizer(s: str):
@@ -30,7 +31,8 @@ class Environment:
         self._lang = LanguageIndex(
             [f"{BEGIN_TAG}{END_TAG}"] + self._questions,
             tokenizer=lambda s: list(s),
-            empty_token=EMPTY_TOKEN
+            empty_token=EMPTY_TOKEN,
+            unknown_token=UNKNOWN_TOKEN
         )
 
     def step(self, action):
@@ -85,7 +87,6 @@ class Environment:
 #     result = ' '.join(random_chars)
 #     result = BEGIN_TAG + ' ' + result + ' ' + END_TAG
 #     return result
-
 
 
 # some test code

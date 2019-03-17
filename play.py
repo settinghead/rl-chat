@@ -2,7 +2,6 @@
 
 # pudb.set_trace()
 
-import tensorflow as tf
 # import matplotlib.pyplot as plt
 import numpy as np
 from itertools import count
@@ -12,6 +11,8 @@ from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_L
 from agent import Baseline
 import data
 import random
+import torch
+import tf
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
@@ -41,10 +42,8 @@ def initialize_hidden_state(batch_sz, num_enc_units):
 
 
 def main():
-    tf.enable_eager_execution()
 
     env = Environment()
-    # print(env.lang.word2idx)
 
     SAY_HI = "hello"
 
@@ -62,9 +61,9 @@ def main():
 
     history = []
 
-    # l_optimizer = tf.train.RMSPropOptimizer(0.001)
-    l_optimizer = tf.train.AdamOptimizer()
-    bl_optimizer = tf.train.AdamOptimizer()
+    l_optimizer = torch.optm.Adam()
+    bl_optimizer = torch.optm.Adam()
+
     batch = None
 
     def maybe_pad_sentence(s):
@@ -99,13 +98,16 @@ def main():
             state_inp = [env.lang.word2idx[token]
                          for token in char_tokenizer(state)]
             state_inp_b = maybe_pad_sentence([state_inp])
+
+            # TODO: THIS IS NOT WORKING
             enc_hidden = encoder(
-                tf.convert_to_tensor(state_inp_b), init_hidden
+                torch.tensor(state_inp_b), init_hidden
             )
             dec_hidden = enc_hidden
+            # TODO: THIS IS NOT WORKING
 
             w = BEGIN_TAG
-            curr_w_enc = tf.expand_dims(
+            curr_w_enc = torch.unsqueeze(
                 [targ_lang.word2idx[w]], 0
             )
 
@@ -113,13 +115,15 @@ def main():
             actions = []
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
                 w_probs_b, dec_hidden = decoder(curr_w_enc, dec_hidden)
-                w_dist = tf.distributions.Categorical(probs=w_probs_b[0])
+                w_dist = torch.distributions.categorical.Categorical(
+                    probs=w_probs_b[0])
                 w_idx = w_dist.sample(1)
                 actions.append(w_idx)
                 # w_idx = tf.argmax(w_probs[0]).numpy()[0]
                 w = targ_lang.idx2word[w_idx.numpy()[0]]
-                curr_w_enc = tf.expand_dims(
-                    [targ_lang.word2idx[w]] * 1, 1)
+                curr_w_enc = torch.unsqueeze(
+                    [targ_lang.word2idx[w]] * 1, 1
+                )
                 outputs.append(w)
 
             # action is a sentence (string)
@@ -134,15 +138,6 @@ def main():
         while len(history) >= BATCH_SIZE:
             batch = history[:BATCH_SIZE]
 
-            # def action_to_encs(action: str):
-            #     begin_w = tf.expand_dims(
-            #         [targ_lang.word2idx[BEGIN_TAG]], 1)
-            #     enc = [begin_w] + [
-            #         tf.expand_dims([targ_lang.word2idx[token]], 1)
-            #         for token in char_tokenizer(action)
-            #     ]
-            #     return enc
-
             state_inp_b, action_encs_b, reward_b, ret_seq_b = zip(*[
                 [
                     sentence_to_idxs(state),
@@ -154,42 +149,53 @@ def main():
             ])
             action_encs_b = list(action_encs_b)
             action_encs_b = maybe_pad_sentence(action_encs_b)
-            action_encs_b = tf.expand_dims(
-                tf.convert_to_tensor(action_encs_b), -1)
+            action_encs_b = torch.unsqueeze(
+                torch.tensor(action_encs_b), -1)
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            ret_seq_b = torch.tensor(ret_seq_b), dtype = torch.float32)
 
-            ret_seq_b = tf.cast(tf.convert_to_tensor(ret_seq_b), 'float32')
+            loss=0
+            loss_bl=0
 
-            loss = 0
-            loss_bl = 0
+            l_optimizer.zero_grad()
+            # bl_optimizer.zero_grad()
 
-            with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
+            # with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
                 # accumulate gradient with GradientTape
-                init_hidden_b = initialize_hidden_state(BATCH_SIZE, UNITS)
+                init_hidden_b=initialize_hidden_state(BATCH_SIZE, UNITS)
 
-                state_inp_b = maybe_pad_sentence(state_inp_b)
-                state_inp_b = tf.convert_to_tensor(state_inp_b)
+                state_inp_b=maybe_pad_sentence(state_inp_b)
+                state_inp_b=torch.tensor(state_inp_b)
 
-                enc_hidden_b = encoder(state_inp_b, init_hidden_b)
-                dec_hidden_b = enc_hidden_b
-                max_sentence_len = action_encs_b.shape[1]
-                prev_w_idx_b = tf.expand_dims(
-                    tf.cast(
-                        tf.convert_to_tensor(
-                            [env.lang.word2idx[BEGIN_TAG]] * BATCH_SIZE),
-                        'float32'
+                # enc_hidden_b=encoder(state_inp_b, init_hidden_b)
+                src_enc, *_=self.model.encoder(src_seq, src_pos)
+
+                dec_hidden_b=enc_hidden_b
+                max_sentence_len=action_encs_b.shape[1]
+                prev_w_idx_b=torch.unsqueeze(
+                    torch.tensor(
+                        [env.lang.word2idx[BEGIN_TAG]] * BATCH_SIZE,
+                        torch.float32
                     ), -1
                 )
                 for t in range(max_sentence_len):
 
                     ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
 
-                    w_probs_b, dec_hidden_b = decoder(
-                        prev_w_idx_b, dec_hidden_b
-                    )
+                    # TODO: THIS IS NOT WORKING
+                    dec_output, *_ = self.model.decoder(dec_seq, dec_pos, src_seq, enc_output)
+                                    dec_output = dec_output[:, -1, :]  # Pick the last step: (bh * bm) * d_h
+                                    word_prob = F.log_softmax(self.model.tgt_word_prj(dec_output), dim=1)
+                                    word_prob = word_prob.view(n_active_inst, n_bm, -1)
+                    # TODO: THIS IS NOT WORKING
+
+
+                    # w_probs_b, dec_hidden_b = decoder(
+                    #     prev_w_idx_b, dec_hidden_b
+                    # )
                     curr_w_idx_b = action_encs_b[:, t]
                     # w_probs_b = tf.nn.softmax(w_logits_b)
                     dist = tf.distributions.Categorical(probs=w_probs_b)
@@ -209,14 +215,14 @@ def main():
 
             # calculate cumulative gradients
 
-            model_vars = encoder.variables + decoder.variables
-            grads = l_tape.gradient(loss, model_vars)
-
-            grads_bl = bl_tape.gradient(loss_bl,  baseline.variables)
+            # model_vars = encoder.variables + decoder.variables
+            loss.backward()
+            loss_bl.backward()
 
             # finally, apply gradient
-            l_optimizer.apply_gradients(zip(grads, model_vars))
-            bl_optimizer.apply_gradients(zip(grads_bl, baseline.variables))
+
+            l_optimizer.step()
+            bl_optimizer.step()
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
