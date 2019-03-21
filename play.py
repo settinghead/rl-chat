@@ -8,7 +8,7 @@ from itertools import count
 # from encoder_decoder_simple import get_decoder, get_encoder
 from encoder_decoder import Encoder, Decoder
 from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_LEN
-from agent import Baseline
+# from agent import Baseline
 import data
 import random
 import torch
@@ -58,19 +58,18 @@ def main():
                 n_layers=6,
                 n_head=8,
                 dropout=0.1)
-    src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
     '''
     encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
     '''
-    baseline = Baseline(UNITS)
+    # baseline = Baseline(UNITS)
 
     history = []
 
     l_optimizer = torch.optm.Adam()
-    bl_optimizer = torch.optm.Adam()
+    # bl_optimizer = torch.optm.Adam()
 
     batch = None
 
@@ -100,7 +99,7 @@ def main():
 
         while not done:
             # tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
-            enc_output, *_ = self.transformer.encoder(src_seq, src_pos)
+            enc_output, *_ = transformer.encoder(src_seq, src_pos)
 
             w = BEGIN_TAG
             curr_w_seq = torch.zeros([1, MAX_TARGET_LEN], dtype=torch.int32)
@@ -113,12 +112,11 @@ def main():
                 curr_w_pos = torch.zeros(
                     [1, MAX_TARGET_LEN], dtype=torch.int32)
                 curr_w_pos[:, 0] = count
-                dec_output, * \
-                    _ = self.transformer.decoder(
+                dec_output, *_ = transformer.decoder(
                         curr_w_seq, curr_w_pos, src_seq, enc_output)
                 count += 1
-                w_prob_b = F.log_softmax(
-                    self.transformer.tgt_word_prj(dec_output), dim=1)
+                w_prob_b = torch.nn.functional.log_softmax(
+                    transformer.tgt_word_prj(dec_output), dim=1)
                 w_dist = torch.distributions.categorical.Categorical(
                     probs=w_probs_b[0])
                 w_idx = w_dist.sample(1)
@@ -162,11 +160,12 @@ def main():
             ret_seq_b = torch.tensor(ret_seq_b), dtype = torch.float32)
 
             loss=0
-            loss_bl=0
+            # loss_bl=0
 
             l_optimizer.zero_grad()
             # accumulate gradient with GradientTape
             src_pos=np.zeros(BATCH_SIZE, UNITS)
+
             state_inp_b=maybe_pad_sentence(state_inp_b)
             for i in range(state_inp_b.shape[0]):
                  for j in range(state_inp_b.shape[1]):
@@ -177,7 +176,7 @@ def main():
             src_pos=torch.tensor(src_pos)
 
             # enc_hidden_b=encoder(state_inp_b, init_hidden_b)
-            enc_output, *_=self.transformer.encoder(state_inp_b, src_pos)
+            enc_output, *_=transformer.encoder(state_inp_b, src_pos)
 
             dec_hidden_b=enc_hidden_b
             max_sentence_len=action_encs_b.shape[1]
@@ -186,27 +185,37 @@ def main():
 
             for t in range(max_sentence_len):
 
-                ret_b=tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+                ret_b=torch.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+                # ret_b=tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+
                 curr_w_pos=torch.zeros(
                     [1, MAX_TARGET_LEN], dtype = torch.int32)
                 curr_w_pos[:, 0]=t
-                dec_output, *
-                    _=self.transformer.decoder(
+                dec_output, *_=transformer.decoder(
                         prev_w_idx_b, dec_pos, src_seq, enc_output)
                 curr_w_idx_b=action_encs_b[:, t]
+                w_logits_b=dec_output[:, t]
                 # w_probs_b = tf.nn.softmax(w_logits_b)
-                dist=tf.distributions.Categorical(probs = w_probs_b)
-                log_probs_b=tf.transpose(
-                    dist.log_prob(tf.transpose(curr_w_idx_b))
+                w_probs_b=torch.nn.softmax(w_logits_b)
+                dist=torch.distributions.categorical.Categorical(
+                    probs = w_probs_b
                 )
-                bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
-                delta_b = ret_b - bl_val_b
 
-                cost_b = -tf.math.multiply(log_probs_b, delta_b)
+                log_probs_b=torch.transpose(
+                    dist.log_prob(torch.transpose(curr_w_idx_b))
+                )
+
+                # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                # delta_b = ret_b - bl_val_b
+
+                # cost_b = -tf.math.multiply(log_probs_b, delta_b)
                 # cost_b = -tf.math.multiply(log_probs_b, ret_b)
+                cost_b = - log_probs * ret_b   # alternatively, use torch.mul() but it is overloaded. Might need to try log_probs_b*vec.expand_as(A)
+                #  log_probs_b*vec.expand_as(A)
+                # cost_b = -torch.bmm()   #if we are doing batch multiplication
 
                 loss += cost_b
-                loss_bl += -tf.math.multiply(delta_b, bl_val_b)
+                # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
 
@@ -214,12 +223,12 @@ def main():
 
             # model_vars = encoder.variables + decoder.variables
             loss.backward()
-            loss_bl.backward()
+            # loss_bl.backward()
 
             # finally, apply gradient
 
             l_optimizer.step()
-            bl_optimizer.step()
+            # bl_optimizer.step()
 
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
@@ -239,7 +248,7 @@ def main():
                 (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
             )
             print("avg reward: ", sum(reward_b) / len(reward_b))
-            print("avg loss: ", tf.reduce_mean(loss).numpy())
+            print("avg loss: ", np.mean(loss.numpy()))
             print("avg grad: ", np.mean(grads[1].numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
