@@ -13,6 +13,8 @@ import data
 import random
 import torch
 from transformer.transformer.Models import Transformer
+from transformer.dataset import collate_fn
+from corpus_utils import tokenize_sentence
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
@@ -58,12 +60,7 @@ def main():
                 n_layers=6,
                 n_head=8,
                 dropout=0.1)
-    '''
-    encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
-                      UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
-    decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
-                      UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
-    '''
+
     # baseline = Baseline(UNITS)
 
     history = []
@@ -98,7 +95,13 @@ def main():
         state, _, done = env.step(SAY_HI)
 
         while not done:
-            # tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
+            
+            src_seq = [env.lang.word2idx[token] 
+                         for token in tokenize_sentence(state)]
+            src_seq = maybe_pad_sentence(src_seq)
+            src_pos = collate_fn(src_seq)
+            print(src_seq)
+            print(src_pos)
             enc_output, *_ = transformer.encoder(src_seq, src_pos)
 
             w = BEGIN_TAG
@@ -157,7 +160,7 @@ def main():
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-            ret_seq_b = torch.tensor(ret_seq_b), dtype = torch.float32)
+            ret_seq_b = torch.tensor(ret_seq_b, dtype = torch.float32)
 
             loss=0
             # loss_bl=0
