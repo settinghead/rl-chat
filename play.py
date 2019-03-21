@@ -12,7 +12,7 @@ from agent import Baseline
 import data
 import random
 import torch
-import tf
+from transformer.transformer.Models import Transformer
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
@@ -33,14 +33,6 @@ MAX_TARGET_LEN = 20  # TODO: hack
 UNITS = 128
 
 
-def initialize_hidden_state(batch_sz, num_enc_units):
-    return (
-        tf.zeros((batch_sz, num_enc_units)),
-        tf.zeros((batch_sz, num_enc_units)),
-        tf.zeros((batch_sz, num_enc_units))
-    )
-
-
 def main():
 
     env = Environment()
@@ -52,11 +44,27 @@ def main():
     vocab_inp_size = len(env.lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
 
+    transformer = Transformer(
+                vocab_inp_size,
+                vocab_tar_size,
+                MAX_TARGET_LEN,
+                tgt_emb_prj_weight_sharing=True,
+                emb_src_tgt_weight_sharing=True,
+                d_k=64,
+                d_v=64,
+                d_model=512,
+                d_word_vec=EMBEDDING_DIM,
+                d_inner=2048,
+                n_layers=6,
+                n_head=8,
+                dropout=0.1)
+    src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
+    '''
     encoder = Encoder(vocab_inp_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, inp_lang=env.lang.vocab)
     decoder = Decoder(vocab_tar_size, EMBEDDING_DIM,
                       UNITS, batch_sz=BATCH_SIZE, targ_lang=targ_lang.vocab)
-
+    '''
     baseline = Baseline(UNITS)
 
     history = []
@@ -91,39 +99,35 @@ def main():
         state, _, done = env.step(SAY_HI)
 
         while not done:
-            # Assume initial hidden state is default, don't use: #enc_hidden = INITIAL_ENC_HIDDEN
-
-            # Run an episode using the TRAINED ENCODER-DECODER model #TODO: test this!!
-            init_hidden = initialize_hidden_state(1, UNITS)
-            state_inp = [env.lang.word2idx[token]
-                         for token in char_tokenizer(state)]
-            state_inp_b = maybe_pad_sentence([state_inp])
-
-            # TODO: THIS IS NOT WORKING
-            enc_hidden = encoder(
-                torch.tensor(state_inp_b), init_hidden
-            )
-            dec_hidden = enc_hidden
-            # TODO: THIS IS NOT WORKING
+            # tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :-1]
+            enc_output, *_ = self.transformer.encoder(src_seq, src_pos)
 
             w = BEGIN_TAG
-            curr_w_enc = torch.unsqueeze(
-                [targ_lang.word2idx[w]], 0
-            )
+            curr_w_seq = torch.zeros([1, MAX_TARGET_LEN], dtype=torch.int32)
+            curr_w_seq[:, 0] = targ_lang.word2idx[w]
 
             outputs = []
             actions = []
+            count = 0
             while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
-                w_probs_b, dec_hidden = decoder(curr_w_enc, dec_hidden)
+                curr_w_pos = torch.zeros(
+                    [1, MAX_TARGET_LEN], dtype=torch.int32)
+                curr_w_pos[:, 0] = count
+                dec_output, * \
+                    _ = self.transformer.decoder(
+                        curr_w_seq, curr_w_pos, src_seq, enc_output)
+                count += 1
+                w_prob_b = F.log_softmax(
+                    self.transformer.tgt_word_prj(dec_output), dim=1)
                 w_dist = torch.distributions.categorical.Categorical(
                     probs=w_probs_b[0])
                 w_idx = w_dist.sample(1)
                 actions.append(w_idx)
                 # w_idx = tf.argmax(w_probs[0]).numpy()[0]
                 w = targ_lang.idx2word[w_idx.numpy()[0]]
-                curr_w_enc = torch.unsqueeze(
-                    [targ_lang.word2idx[w]] * 1, 1
-                )
+                curr_w_seq = torch.zeros(
+                    [1, MAX_TARGET_LEN], dtype=torch.int32)
+                curr_w_seq[:, 0] = targ_lang.word2idx[w]
                 outputs.append(w)
 
             # action is a sentence (string)
@@ -161,57 +165,50 @@ def main():
             loss_bl=0
 
             l_optimizer.zero_grad()
-            # bl_optimizer.zero_grad()
+            # accumulate gradient with GradientTape
+            src_pos=np.zeros(BATCH_SIZE, UNITS)
+            state_inp_b=maybe_pad_sentence(state_inp_b)
+            for i in range(state_inp_b.shape[0]):
+                 for j in range(state_inp_b.shape[1]):
+                     if state_inp_b[i, j] > 0:
+                        src_pos[i, j]=i + 1
 
-            # with tf.GradientTape() as l_tape, tf.GradientTape() as bl_tape:
-                # accumulate gradient with GradientTape
-                init_hidden_b=initialize_hidden_state(BATCH_SIZE, UNITS)
+            state_inp_b=torch.tensor(state_inp_b)
+            src_pos=torch.tensor(src_pos)
 
-                state_inp_b=maybe_pad_sentence(state_inp_b)
-                state_inp_b=torch.tensor(state_inp_b)
+            # enc_hidden_b=encoder(state_inp_b, init_hidden_b)
+            enc_output, *_=self.transformer.encoder(state_inp_b, src_pos)
 
-                # enc_hidden_b=encoder(state_inp_b, init_hidden_b)
-                src_enc, *_=self.model.encoder(src_seq, src_pos)
+            dec_hidden_b=enc_hidden_b
+            max_sentence_len=action_encs_b.shape[1]
+            prev_w_idx_b=torch.zeros([1, MAX_TARGET_LEN], dtype = torch.int32)
+            prev_w_idx_b[:, 0]=targ_lang.word2idx[BEGIN_TAG]
 
-                dec_hidden_b=enc_hidden_b
-                max_sentence_len=action_encs_b.shape[1]
-                prev_w_idx_b=torch.unsqueeze(
-                    torch.tensor(
-                        [env.lang.word2idx[BEGIN_TAG]] * BATCH_SIZE,
-                        torch.float32
-                    ), -1
+            for t in range(max_sentence_len):
+
+                ret_b=tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+                curr_w_pos=torch.zeros(
+                    [1, MAX_TARGET_LEN], dtype = torch.int32)
+                curr_w_pos[:, 0]=t
+                dec_output, *
+                    _=self.transformer.decoder(
+                        prev_w_idx_b, dec_pos, src_seq, enc_output)
+                curr_w_idx_b=action_encs_b[:, t]
+                # w_probs_b = tf.nn.softmax(w_logits_b)
+                dist=tf.distributions.Categorical(probs = w_probs_b)
+                log_probs_b=tf.transpose(
+                    dist.log_prob(tf.transpose(curr_w_idx_b))
                 )
-                for t in range(max_sentence_len):
+                bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
+                delta_b = ret_b - bl_val_b
 
-                    ret_b = tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+                cost_b = -tf.math.multiply(log_probs_b, delta_b)
+                # cost_b = -tf.math.multiply(log_probs_b, ret_b)
 
-                    # TODO: THIS IS NOT WORKING
-                    dec_output, *_ = self.model.decoder(dec_seq, dec_pos, src_seq, enc_output)
-                                    dec_output = dec_output[:, -1, :]  # Pick the last step: (bh * bm) * d_h
-                                    word_prob = F.log_softmax(self.model.tgt_word_prj(dec_output), dim=1)
-                                    word_prob = word_prob.view(n_active_inst, n_bm, -1)
-                    # TODO: THIS IS NOT WORKING
+                loss += cost_b
+                loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
-
-                    # w_probs_b, dec_hidden_b = decoder(
-                    #     prev_w_idx_b, dec_hidden_b
-                    # )
-                    curr_w_idx_b = action_encs_b[:, t]
-                    # w_probs_b = tf.nn.softmax(w_logits_b)
-                    dist = tf.distributions.Categorical(probs=w_probs_b)
-                    log_probs_b = tf.transpose(
-                        dist.log_prob(tf.transpose(curr_w_idx_b))
-                    )
-                    bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
-                    delta_b = ret_b - bl_val_b
-
-                    cost_b = -tf.math.multiply(log_probs_b, delta_b)
-                    # cost_b = -tf.math.multiply(log_probs_b, ret_b)
-
-                    loss += cost_b
-                    loss_bl += -tf.math.multiply(delta_b, bl_val_b)
-
-                    prev_w_idx_b = curr_w_idx_b
+                prev_w_idx_b = curr_w_idx_b
 
             # calculate cumulative gradients
 
