@@ -143,21 +143,23 @@ def main():
             src_seq, src_pos = collate_fn(list(state_inp_b))
             enc_output_b, *_ = model.encoder(src_seq, src_pos)
             max_sentence_len = action_inp_b.shape[1]
-            tgt_tokens = torch.zeros((1, MAX_TARGET_LEN), dtype=torch.int32)
-            tgt_tokens[:, 0] = [Constants.BOS_WORD]
-            print(tgt_tokens)
-
+            tgt_tokens = [Constants.BOS_WORD for i in range(BATCH_SIZE)]
+            tgt_tokens = np.asarray(tgt_tokens).reshape([BATCH_SIZE,1])
             for t in range(max_sentence_len):
-                tgt_seq = [env.lang.word2idx[token] for token in tgt_tokens]
-                prev_w_idx_b, tgt_pos = collate_fn([tgt_seq])
+                tgt_seq = np.empty((BATCH_SIZE, t+1))
+                for i in range(tgt_tokens.shape[0]):
+                    for j in range(tgt_tokens.shape[1]):
+                        tgt_seq[i, j] = env.lang.word2idx[tgt_tokens[i, j]]
+                # LEAH wrong data structure -> cannot resize
+                prev_w_idx_b, tgt_pos = collate_fn(tgt_seq)
                 dec_output_b, *_ = model.decoder(prev_w_idx_b, tgt_pos, src_seq, enc_output_b)
-                print(dec_output_b.size())
+
                 curr_w_idx_b = action_inp_b[:, t]
-                print(curr_w_idx_b.size())
+
                 w_logits_b = dec_output_b[:, t]
-                print(w_logits_b.size())
+
                 w_probs_b = torch.nn.functional.log_softmax(model.tgt_word_prj(dec_output_b), dim=2).squeeze(0)
-                print(w_probs_b.size())
+
                 dist = torch.distributions.categorical.Categorical(probs=w_probs_b)
                 log_probs_b=torch.Transpose(
                     dist.log_prob(torch.Transpose(curr_w_idx_b))
@@ -177,7 +179,8 @@ def main():
                 # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
-                tgt_tokens.append(targ_lang.idx2word[prev_w_idx_b])
+                #LEAH -> HAS TO BE BATCH --> NEED TO CONCAT ARRAY
+                tgt_tokens += targ_lang.idx2word[prev_w_idx_b]
 
             # calculate cumulative gradients
 
