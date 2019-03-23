@@ -5,6 +5,7 @@ from corpus_utils import tokenize_sentence, LanguageIndex
 from itertools import takewhile
 import random
 from difflib import SequenceMatcher
+import transformer.Constants as Constants
 
 CONVO_LEN = 1
 MIN_UTTERANCE_LEN = 4
@@ -13,7 +14,6 @@ BEGIN_TAG = "▶"
 END_TAG = "◀"
 EMPTY_TOKEN = "◌"
 UNKNOWN_TOKEN = "♡"
-
 
 def char_tokenizer(s: str):
     return list(s)
@@ -29,10 +29,7 @@ class Environment:
         self.reset()
         self._questions, _ = data.load_conv_text()
         self._lang = LanguageIndex(
-            [f"{BEGIN_TAG}{END_TAG}"] + self._questions,
-            tokenizer=lambda s: list(s),
-            empty_token=EMPTY_TOKEN,
-            unknown_token=UNKNOWN_TOKEN
+            self._questions
         )
 
     def step(self, action):
@@ -49,9 +46,9 @@ class Environment:
 
         state = random.sample(self._questions, 1)[0]
         # state = "hellozzz"
-        state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
-        state = ''.join(state)
-        state = f'{BEGIN_TAG}{state}{END_TAG}'
+        #state = char_tokenizer(state)[:MAX_UTTERANCE_LEN]
+        #state = ''.join(state)
+        #state = f'{BEGIN_TAG}{state}{END_TAG}'
 
         self.history.append(state)
 
@@ -61,16 +58,15 @@ class Environment:
         # random.seed(48)
         self.history = []
 
-    def calc_reward(self, utterance1: str, utterance2: str):
+    def calc_reward(self,
+        utterance1: str,
+        utterance2: str,
+        exclude_tokens = [Constants.EOS, Constants.PAD, Constants.BOS]):
         # calc string distance
-        utterance1 = utterance1.replace(EMPTY_TOKEN, "")
-        utterance2 = utterance2.replace(EMPTY_TOKEN, "")
-        seq1 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
-            self.lang.word2idx[t] for t in
-            char_tokenizer(utterance1)[1:]]))
-        seq2 = list(takewhile(lambda i: i != self.lang.word2idx[END_TAG], [
-            self.lang.word2idx[t] for t in
-            char_tokenizer(utterance2)][1:]))
+        token_seq1 = [self.lang.word2idx[t] for t in tokenize_sentence(utterance1)]
+        token_seq2 = [self.lang.word2idx[t] for t in tokenize_sentence(utterance2)]
+        seq1 = [t for t in token_seq1 if t not in exclude_tokens] 
+        seq2 = [t for t in token_seq2 if t not in exclude_tokens]
         r = SequenceMatcher(None, seq1, seq2).ratio()
         # if(r > 0):
         #     print([self.lang.idx2word[idx]

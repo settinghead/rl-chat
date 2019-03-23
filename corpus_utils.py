@@ -1,17 +1,7 @@
 from collections import defaultdict
 import nltk
 import itertools
-
-# space is included in whitelist
-
-# BEGIN_TAG = "▶"
-# END_TAG = "◀"
-# EMPTY_TOKEN = "◌"
-
-
-# EN_WHITELIST = '0123456789abcdefghijklmnopqrstuvwxyz .<>.,?:;!&[]' + \
-#     EN_BLACKLIST = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~\''
-
+import transformer.Constants as Constants
 
 def tokenize_sentence(sentence):
     sentence = sentence.lower()
@@ -52,8 +42,10 @@ def index_(tokenized_sentences, vocab_size, extra_vocab):
 class LanguageIndex():
     def __init__(
         self, samples,
-        empty_token,
-        unknown_token,
+        unknown_token = Constants.UNK_WORD,
+        empty_token = Constants.PAD_WORD,
+        begin_token = Constants.BOS_WORD,
+        end_token = Constants.EOS_WORD,
         tokenizer=tokenize_sentence,
     ):
         self._tokenizer = tokenizer
@@ -62,6 +54,6 @@ class LanguageIndex():
         self.idx2word, self.word2idx = index_(
             [
                 tokenizer(s) for s in samples
-            ], VOCAB_SIZE, [unknown_token, empty_token]
+            ], VOCAB_SIZE, [empty_token, unknown_token, begin_token, end_token]
         )
         self.vocab = self.idx2word

@@ -12,9 +12,11 @@ from environment import Environment, char_tokenizer, BEGIN_TAG, END_TAG, CONVO_L
 import data
 import random
 import torch
-from transformer.transformer.Models import Transformer
+from transformer.Models import Transformer
 from transformer.dataset import collate_fn
+import transformer.Constants as Constants
 from corpus_utils import tokenize_sentence
+import tensorflow as tf
 
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
@@ -46,27 +48,16 @@ def main():
     vocab_inp_size = len(env.lang.word2idx)
     vocab_tar_size = len(targ_lang.word2idx)
 
-    transformer = Transformer(
+    model = Transformer(
                 vocab_inp_size,
                 vocab_tar_size,
-                MAX_TARGET_LEN,
-                tgt_emb_prj_weight_sharing=True,
-                emb_src_tgt_weight_sharing=True,
-                d_k=64,
-                d_v=64,
-                d_model=512,
-                d_word_vec=EMBEDDING_DIM,
-                d_inner=2048,
-                n_layers=6,
-                n_head=8,
-                dropout=0.1)
+                MAX_TARGET_LEN)
 
     # baseline = Baseline(UNITS)
 
     history = []
 
-    l_optimizer = torch.optm.Adam()
-    # bl_optimizer = torch.optm.Adam()
+    l_optimizer = torch.optim.Adam(model.parameters())
 
     batch = None
 
@@ -84,7 +75,7 @@ def main():
 
     def sentence_to_idxs(sentence: str):
         return [env.lang.word2idx[token]
-                for token in char_tokenizer(sentence)]
+            for token in tokenize_sentence(sentence)]
 
     for episode in range(EPISODES):
 
@@ -95,45 +86,31 @@ def main():
         state, _, done = env.step(SAY_HI)
 
         while not done:
-            
-            src_seq = [env.lang.word2idx[token] 
-                         for token in tokenize_sentence(state)]
-            src_seq = maybe_pad_sentence(src_seq)
-            src_pos = collate_fn(src_seq)
-            print(src_seq)
-            print(src_pos)
-            enc_output, *_ = transformer.encoder(src_seq, src_pos)
-
-            w = BEGIN_TAG
-            curr_w_seq = torch.zeros([1, MAX_TARGET_LEN], dtype=torch.int32)
-            curr_w_seq[:, 0] = targ_lang.word2idx[w]
-
+            src_seq = [env.lang.word2idx[token] for token in tokenize_sentence(state)]
+            src_seq, src_pos = collate_fn([src_seq])
+            enc_output, *_ = model.encoder(src_seq, src_pos)
+            tgt_tokens = [Constants.BOS_WORD]
             outputs = []
             actions = []
-            count = 0
-            while w != END_TAG and len(outputs) < MAX_TARGET_LEN:
-                curr_w_pos = torch.zeros(
-                    [1, MAX_TARGET_LEN], dtype=torch.int32)
-                curr_w_pos[:, 0] = count
-                dec_output, *_ = transformer.decoder(
-                        curr_w_seq, curr_w_pos, src_seq, enc_output)
-                count += 1
-                w_prob_b = torch.nn.functional.log_softmax(
-                    transformer.tgt_word_prj(dec_output), dim=1)
-                w_dist = torch.distributions.categorical.Categorical(
-                    probs=w_probs_b[0])
-                w_idx = w_dist.sample(1)
-                actions.append(w_idx)
-                # w_idx = tf.argmax(w_probs[0]).numpy()[0]
-                w = targ_lang.idx2word[w_idx.numpy()[0]]
-                curr_w_seq = torch.zeros(
-                    [1, MAX_TARGET_LEN], dtype=torch.int32)
-                curr_w_seq[:, 0] = targ_lang.word2idx[w]
-                outputs.append(w)
+            while tgt_tokens[len(tgt_tokens)-1] != END_TAG and len(outputs) < MAX_TARGET_LEN:
+                tgt_seq = [env.lang.word2idx[token] for token in tgt_tokens]
+                tgt_seq, tgt_pos = collate_fn([tgt_seq])
+                dec_output, *_ = model.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
+                w_probs_b = torch.nn.functional.log_softmax(model.tgt_word_prj(dec_output), dim=2).squeeze(0).squeeze(0)
+                w_dist = torch.distributions.categorical.Categorical(probs=w_probs_b)
+                w_idx = w_dist.sample().data.numpy()
+                if len(tgt_tokens) == 1:
+                    w_idx = [w_idx]
+                actions = w_idx
+                tgt_tokens = [Constants.BOS_WORD]
+                [tgt_tokens.append(targ_lang.idx2word[w_idx]) for w_idx in actions]
+                outputs = tgt_tokens
 
             # action is a sentence (string)
-            action_str = ''.join(outputs)
+            action_str = ' '.join(outputs)
+            #print("action_str", action_str)
             next_state, reward, done = env.step(action_str)
+            #print(reward)
             history.append((state, actions, action_str, reward))
             state = next_state
 
@@ -142,70 +119,48 @@ def main():
         # Update policy
         while len(history) >= BATCH_SIZE:
             batch = history[:BATCH_SIZE]
-
-            state_inp_b, action_encs_b, reward_b, ret_seq_b = zip(*[
+            state_inp_b, action_inp_b, reward_b, ret_seq_b = zip(*[
                 [
                     sentence_to_idxs(state),
-                    actions_enc_b,
+                    actions_b,
                     reward,
                     get_returns(reward, MAX_TARGET_LEN)
                 ]
-                for state, actions_enc_b, _, reward in batch
+                for state, actions_b, _, reward in batch
             ])
-            action_encs_b = list(action_encs_b)
-            action_encs_b = maybe_pad_sentence(action_encs_b)
-            action_encs_b = torch.unsqueeze(
-                torch.tensor(action_encs_b), -1)
+            action_inp_b = list(action_inp_b)
+            action_inp_b = torch.Tensor(action_inp_b).unsqueeze(-1)
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-            ret_seq_b = torch.tensor(ret_seq_b, dtype = torch.float32)
+            ret_seq_b = torch.Tensor(ret_seq_b)
 
             loss=0
             # loss_bl=0
-
             l_optimizer.zero_grad()
             # accumulate gradient with GradientTape
-            src_pos=np.zeros(BATCH_SIZE, UNITS)
-
-            state_inp_b=maybe_pad_sentence(state_inp_b)
-            for i in range(state_inp_b.shape[0]):
-                 for j in range(state_inp_b.shape[1]):
-                     if state_inp_b[i, j] > 0:
-                        src_pos[i, j]=i + 1
-
-            state_inp_b=torch.tensor(state_inp_b)
-            src_pos=torch.tensor(src_pos)
-
-            # enc_hidden_b=encoder(state_inp_b, init_hidden_b)
-            enc_output, *_=transformer.encoder(state_inp_b, src_pos)
-
-            dec_hidden_b=enc_hidden_b
-            max_sentence_len=action_encs_b.shape[1]
-            prev_w_idx_b=torch.zeros([1, MAX_TARGET_LEN], dtype = torch.int32)
-            prev_w_idx_b[:, 0]=targ_lang.word2idx[BEGIN_TAG]
+            src_seq, src_pos = collate_fn(list(state_inp_b))
+            enc_output_b, *_ = model.encoder(src_seq, src_pos)
+            max_sentence_len = action_inp_b.shape[1]
+            tgt_tokens = torch.zeros((1, MAX_TARGET_LEN), dtype=torch.int32)
+            tgt_tokens[:, 0] = [Constants.BOS_WORD]
+            print(tgt_tokens)
 
             for t in range(max_sentence_len):
-
-                ret_b=torch.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
-                # ret_b=tf.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
-
-                curr_w_pos=torch.zeros(
-                    [1, MAX_TARGET_LEN], dtype = torch.int32)
-                curr_w_pos[:, 0]=t
-                dec_output, *_=transformer.decoder(
-                        prev_w_idx_b, dec_pos, src_seq, enc_output)
-                curr_w_idx_b=action_encs_b[:, t]
-                w_logits_b=dec_output[:, t]
-                # w_probs_b = tf.nn.softmax(w_logits_b)
-                w_probs_b=torch.nn.softmax(w_logits_b)
-                dist=torch.distributions.categorical.Categorical(
-                    probs = w_probs_b
-                )
-
-                log_probs_b=torch.transpose(
-                    dist.log_prob(torch.transpose(curr_w_idx_b))
+                tgt_seq = [env.lang.word2idx[token] for token in tgt_tokens]
+                prev_w_idx_b, tgt_pos = collate_fn([tgt_seq])
+                dec_output_b, *_ = model.decoder(prev_w_idx_b, tgt_pos, src_seq, enc_output_b)
+                print(dec_output_b.size())
+                curr_w_idx_b = action_inp_b[:, t]
+                print(curr_w_idx_b.size())
+                w_logits_b = dec_output_b[:, t]
+                print(w_logits_b.size())
+                w_probs_b = torch.nn.functional.log_softmax(model.tgt_word_prj(dec_output_b), dim=2).squeeze(0)
+                print(w_probs_b.size())
+                dist = torch.distributions.categorical.Categorical(probs=w_probs_b)
+                log_probs_b=torch.Transpose(
+                    dist.log_prob(torch.Transpose(curr_w_idx_b))
                 )
 
                 # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
@@ -213,6 +168,7 @@ def main():
 
                 # cost_b = -tf.math.multiply(log_probs_b, delta_b)
                 # cost_b = -tf.math.multiply(log_probs_b, ret_b)
+                ret_b=torch.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
                 cost_b = - log_probs * ret_b   # alternatively, use torch.mul() but it is overloaded. Might need to try log_probs_b*vec.expand_as(A)
                 #  log_probs_b*vec.expand_as(A)
                 # cost_b = -torch.bmm()   #if we are doing batch multiplication
@@ -221,6 +177,7 @@ def main():
                 # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
+                tgt_tokens.append(targ_lang.idx2word[prev_w_idx_b])
 
             # calculate cumulative gradients
 

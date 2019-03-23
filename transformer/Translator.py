@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformer.Models import Transformer
-from transformer.Beam import Beam
+from Models import Transformer
+from Beam import Beam
 
 class Translator(object):
     ''' Load with trained model and handle the beam search '''
@@ -144,7 +144,7 @@ class Translator(object):
 
             #-- Prepare beams
             inst_dec_beams = [Beam(n_bm, device=self.device) for _ in range(n_inst)]
-
+            
             #-- Bookkeeping for active or not
             active_inst_idx_list = list(range(n_inst))
             inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)

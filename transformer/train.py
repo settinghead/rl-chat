@@ -11,9 +11,9 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
-import transformer.Constants as Constants
+import Constants
 from dataset import TranslationDataset, paired_collate_fn
-from transformer.Models import Transformer
+from Models import Transformer
 from transformer.Optim import ScheduledOptim
 
 def cal_performance(pred, gold, smoothing=False):

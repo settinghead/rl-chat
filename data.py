@@ -2,7 +2,7 @@ BEGIN_TAG = "▶"
 END_TAG = "◀"
 EMPTY_TOKEN = "◌"
 UNK_TOKEN = "<unk>"
-
+import transformer.Constants as Constants
 
 def load_conv_text():
     questions = []
@@ -13,7 +13,7 @@ def load_conv_text():
             question = question_answer_pair[0].strip()
             answer = question_answer_pair[1].strip()
             questions.append(question)
-            answers.append(BEGIN_TAG + ' ' + answer + ' ' + END_TAG)
+            answers.append( Constants.BOS_WORD + ' ' + answer + ' ' + Constants.EOS_WORD)
     return questions, answers
 
 
