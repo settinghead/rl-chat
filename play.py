@@ -52,7 +52,7 @@ def main():
 
     print("vocab_inp_size", vocab_inp_size)
     print("vocab_tar_size", vocab_tar_size)
-
+    
     model = Transformer(
         vocab_inp_size,
         vocab_tar_size,
@@ -160,10 +160,10 @@ def main():
             l_optimizer.zero_grad()
             # accumulate gradient with GradientTape
             src_seq, src_pos = collate_fn(list(state_inp_b))
+            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
             enc_output_b, *_ = model.encoder(src_seq, src_pos)
             max_sentence_len = action_inp_b.shape[1]
             tgt_seq = [[Constants.BOS] for i in range(BATCH_SIZE)]
-            
             for t in range(max_sentence_len):
                 # _b stands for batch
                 prev_w_idx_b, tgt_pos = collate_fn(tgt_seq)
@@ -202,8 +202,7 @@ def main():
                 # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
-                tgt_seq = np.append(tgt_seq, prev_w_idx_b.data.numpy(), axis=1)
-
+                tgt_seq = np.append(tgt_seq, prev_w_idx_b.data.numpy(), axis=1).tolist()
 
             # calculate cumulative gradients
 
@@ -237,6 +236,5 @@ def main():
             print("avg loss: ", np.mean(loss.numpy()))
             print("avg grad: ", np.mean(grads[1].numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
-
 
 main()
