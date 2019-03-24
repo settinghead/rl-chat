@@ -56,7 +56,7 @@ def main():
     model = Transformer(
         vocab_inp_size,
         vocab_tar_size,
-        MAX_TARGET_LEN)
+        MAX_TARGET_LEN).cuda()
 
     # baseline = Baseline(UNITS)
 
@@ -95,6 +95,7 @@ def main():
             src_seq = [env.lang.word2idx[token]
                        for token in tokenize_sentence(state)]
             src_seq, src_pos = collate_fn([src_seq])
+            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
             enc_output, *_ = model.encoder(src_seq, src_pos)
             actions_t = []
             actions = []
@@ -107,6 +108,7 @@ def main():
                     tgt_seq = actions
                 tgt_seq = maybe_pad_sentence([tgt_seq])[0].tolist()
                 tgt_seq, tgt_pos = collate_fn([tgt_seq])
+                tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
 
                 dec_output, * \
                     _ = model.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
@@ -121,7 +123,7 @@ def main():
                     probs=w_probs_b)
                 w_idx = w_dist.sample()
                 actions_t.append(w_idx)
-                actions.append(w_idx.numpy()[0])
+                actions.append(w_idx.cpu().numpy()[0])
 
             # action is a sentence (string)
             actions_tokens = [env.lang.idx2word[idx] for idx in actions]
@@ -152,6 +154,8 @@ def main():
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
             ret_seq_b = torch.Tensor(ret_seq_b)
+
+            print(ret_seq_b)
 
             loss = 0
             # loss_bl=0
