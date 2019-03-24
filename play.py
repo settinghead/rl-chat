@@ -132,7 +132,7 @@ def main():
             action_str = ' '.join(actions)
             next_state, reward, done = env.step(action_str)
             # print(reward)
-            history.append((state, actions, action_str, reward))
+            history.append((state, actions_t, action_str, reward))
             state = next_state
 
             # record history (to be used for gradient updating after the episode is done)
