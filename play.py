@@ -52,11 +52,16 @@ def main():
 
     print("vocab_inp_size", vocab_inp_size)
     print("vocab_tar_size", vocab_tar_size)
-
+    ####
+    #model = Transformer(
+    #    vocab_inp_size,
+    #    vocab_tar_size,
+    #    MAX_TARGET_LEN).cuda()
+    ####
     model = Transformer(
         vocab_inp_size,
         vocab_tar_size,
-        MAX_TARGET_LEN).cuda()
+        MAX_TARGET_LEN)
 
     # baseline = Baseline(UNITS)
 
@@ -95,7 +100,9 @@ def main():
             src_seq = [env.lang.word2idx[token]
                        for token in tokenize_sentence(state)]
             src_seq, src_pos = collate_fn([src_seq])
-            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
+            ####
+            #src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
+            ####
             enc_output, *_ = model.encoder(src_seq, src_pos)
             actions_t = []
             actions = []
@@ -107,21 +114,21 @@ def main():
                     tgt_seq = [env.lang.word2idx[Constants.UNK_WORD]]
                 else:
                     tgt_seq = actions_idx
-                tgt_seq = maybe_pad_sentence([tgt_seq])[0].tolist()
                 tgt_seq, tgt_pos = collate_fn([tgt_seq])
-                tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
-
+                #### 
+                #tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
+                ####
+                # dec_output dims: [1, pos, hidden]
                 dec_output, * \
                     _ = model.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
-
-                # w_probs_all_dims: [batch, pos, vocab_size]
-                w_probs_all_b = model.tgt_word_prj(dec_output)
-                # slice on pos, resulting in [batch, vocab_size]
-                w_probs_b = w_probs_all_b[:, len(actions)-1]
-                w_probs_b = torch.nn.functional.softmax(w_probs_b, dim=1)
-
+                # pick last step
+                dec_output = dec_output[:, -1, :]
+                # w_logits dims: [1, vocab_size]
+                w_logits = model.tgt_word_prj(dec_output)
+                # w_probs dims: [1, vocab_size]
+                w_probs = torch.nn.functional.softmax(w_logits, dim=1)
                 w_dist = torch.distributions.categorical.Categorical(
-                    probs=w_probs_b)
+                    probs=w_probs)
                 w_idx_t = w_dist.sample()
                 w_idx = w_idx_t.cpu().numpy()[0]
                 actions_t.append(w_idx_t)
@@ -151,7 +158,6 @@ def main():
             ])
             action_inp_b = list(action_inp_b)
             action_inp_b = torch.tensor(action_inp_b).unsqueeze(-1)
-            print(actions)
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
@@ -165,32 +171,31 @@ def main():
             src_seq, src_pos = collate_fn(list(state_inp_b))
             enc_output_b, *_ = model.encoder(src_seq, src_pos)
             max_sentence_len = action_inp_b.shape[1]
-            tgt_tokens = [Constants.BOS_WORD for i in range(BATCH_SIZE)]
-            tgt_tokens = np.asarray(tgt_tokens).reshape([BATCH_SIZE, 1])
-
+            tgt_seq = [[Constants.BOS] for i in range(BATCH_SIZE)]
+            
             for t in range(max_sentence_len):
-
-                tgt_seq = np.empty((BATCH_SIZE, t+1))
-                for i in range(tgt_tokens.shape[0]):
-                    for j in range(tgt_tokens.shape[1]):
-                        tgt_seq[i, j] = env.lang.word2idx[tgt_tokens[i, j]]
-
-                # LEAH wrong data structure -> cannot resize
+                # _b stands for batch
                 prev_w_idx_b, tgt_pos = collate_fn(tgt_seq)
-                dec_output_b, *_ = model.decoder(prev_w_idx_b, tgt_pos,
-                                                 src_seq, enc_output_b)
-
-                curr_w_idx_b = action_inp_b[:, t]
-
-                w_logits_b = dec_output_b[:, t]
-
+                ####
+                #prev_w_idx_b, tgt_pos = prev_w_idx_b.cuda(), tgt_pos.cuda()
+                ####
+                # dec_output_b dims: [batch, pos, hidden]
+                dec_output_b, *_ = \
+                    model.decoder(prev_w_idx_b, tgt_pos, src_seq, enc_output_b)
+                # pick last step
+                dec_output_b = dec_output_b[:, -1, :]
+                # w_logits_b dims: [batch, vocab_size]
+                w_logits_b = model.tgt_word_prj(dec_output_b)
+                # w_probs dims: [batch, vocab_size]
                 w_probs_b = torch.nn.functional.log_softmax(
-                    model.tgt_word_prj(dec_output_b), dim=2).squeeze(0)
+                    w_logits_b, dim=1)
 
-                dist = torch.distributions.categorical.Categorical(
+                dist_b = torch.distributions.categorical.Categorical(
                     probs=w_probs_b)
-                log_probs_b = torch.Transpose(
-                    dist.log_prob(torch.Transpose(curr_w_idx_b))
+                curr_w_idx_b = action_inp_b[:, t]
+  
+                log_probs_b = torch.transpose(
+                    dist_b.log_prob(torch.transpose(curr_w_idx_b,0,1)),0,1
                 )
 
                 # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
@@ -200,7 +205,7 @@ def main():
                 # cost_b = -tf.math.multiply(log_probs_b, ret_b)
                 ret_b = torch.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
                 # alternatively, use torch.mul() but it is overloaded. Might need to try log_probs_b*vec.expand_as(A)
-                cost_b = - log_probs * ret_b
+                cost_b = - log_probs_b.double() * ret_b.double()
                 #  log_probs_b*vec.expand_as(A)
                 # cost_b = -torch.bmm()   #if we are doing batch multiplication
 
@@ -208,8 +213,8 @@ def main():
                 # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
-                # LEAH -> HAS TO BE BATCH --> NEED TO CONCAT ARRAY
-                tgt_tokens += targ_lang.idx2word[prev_w_idx_b]
+                tgt_seq = np.append(tgt_seq, prev_w_idx_b.data.numpy(), axis=1)
+
 
             # calculate cumulative gradients
 
