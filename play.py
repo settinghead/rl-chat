@@ -99,13 +99,14 @@ def main():
             enc_output, *_ = model.encoder(src_seq, src_pos)
             actions_t = []
             actions = []
+            actions_idx = []
 
             while len(actions) == 0 or actions[len(actions)-1] != END_TAG_IDX and len(actions) < MAX_TARGET_LEN:
                 # construct new tgt_seq based on what's outputed so far
                 if len(actions_t) == 0:
                     tgt_seq = [env.lang.word2idx[Constants.UNK_WORD]]
                 else:
-                    tgt_seq = actions
+                    tgt_seq = actions_idx
                 tgt_seq = maybe_pad_sentence([tgt_seq])[0].tolist()
                 tgt_seq, tgt_pos = collate_fn([tgt_seq])
                 tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
@@ -116,18 +117,19 @@ def main():
                 # w_probs_all_dims: [batch, pos, vocab_size]
                 w_probs_all_b = model.tgt_word_prj(dec_output)
                 # slice on pos, resulting in [batch, vocab_size]
-                w_probs_b = w_probs_all_b[:, len(actions_t)-1]
+                w_probs_b = w_probs_all_b[:, len(actions)-1]
                 w_probs_b = torch.nn.functional.softmax(w_probs_b, dim=1)
 
                 w_dist = torch.distributions.categorical.Categorical(
                     probs=w_probs_b)
-                w_idx = w_dist.sample()
-                actions_t.append(w_idx)
-                actions.append(w_idx.cpu().numpy()[0])
+                w_idx_t = w_dist.sample()
+                w_idx = w_idx_t.cpu().numpy()[0]
+                actions_t.append(w_idx_t)
+                actions_idx.append(w_idx)
+                actions.append(env.lang.idx2word[w_idx])
 
             # action is a sentence (string)
-            actions_tokens = [env.lang.idx2word[idx] for idx in actions]
-            action_str = ' '.join(actions_tokens)
+            action_str = ' '.join(actions)
             next_state, reward, done = env.step(action_str)
             # print(reward)
             history.append((state, actions, action_str, reward))
@@ -148,14 +150,13 @@ def main():
                 for state, actions_b, _, reward in batch
             ])
             action_inp_b = list(action_inp_b)
-            action_inp_b = torch.Tensor(action_inp_b).unsqueeze(-1)
+            action_inp_b = torch.tensor(action_inp_b).unsqueeze(-1)
+            print(actions)
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-            ret_seq_b = torch.Tensor(ret_seq_b)
-
-            print(ret_seq_b)
+            ret_seq_b = torch.tensor(ret_seq_b)
 
             loss = 0
             # loss_bl=0
