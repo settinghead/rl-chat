@@ -52,16 +52,11 @@ def main():
 
     print("vocab_inp_size", vocab_inp_size)
     print("vocab_tar_size", vocab_tar_size)
-    ####
-    #model = Transformer(
-    #    vocab_inp_size,
-    #    vocab_tar_size,
-    #    MAX_TARGET_LEN).cuda()
-    ####
+
     model = Transformer(
         vocab_inp_size,
         vocab_tar_size,
-        MAX_TARGET_LEN)
+        MAX_TARGET_LEN).cuda()
 
     # baseline = Baseline(UNITS)
 
@@ -100,9 +95,7 @@ def main():
             src_seq = [env.lang.word2idx[token]
                        for token in tokenize_sentence(state)]
             src_seq, src_pos = collate_fn([src_seq])
-            ####
-            #src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
-            ####
+            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
             enc_output, *_ = model.encoder(src_seq, src_pos)
             actions_t = []
             actions = []
@@ -115,9 +108,7 @@ def main():
                 else:
                     tgt_seq = actions_idx
                 tgt_seq, tgt_pos = collate_fn([tgt_seq])
-                #### 
-                #tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
-                ####
+                tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
                 # dec_output dims: [1, pos, hidden]
                 dec_output, * \
                     _ = model.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
@@ -176,9 +167,7 @@ def main():
             for t in range(max_sentence_len):
                 # _b stands for batch
                 prev_w_idx_b, tgt_pos = collate_fn(tgt_seq)
-                ####
-                #prev_w_idx_b, tgt_pos = prev_w_idx_b.cuda(), tgt_pos.cuda()
-                ####
+                prev_w_idx_b, tgt_pos = prev_w_idx_b.cuda(), tgt_pos.cuda()
                 # dec_output_b dims: [batch, pos, hidden]
                 dec_output_b, *_ = \
                     model.decoder(prev_w_idx_b, tgt_pos, src_seq, enc_output_b)
