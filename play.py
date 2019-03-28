@@ -21,6 +21,7 @@ import tensorflow as tf
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
+USE_CUDA = True
 EPISODES = 10000000
 BATCH_SIZE = 64
 # MODEL_BATCH_SIZE = 1
@@ -39,6 +40,8 @@ UNITS = 128
 
 def main():
 
+    device = torch.device("cuda:0" if USE_CUDA else "cpu")
+
     env = Environment()
 
     END_TAG_IDX = env.lang.word2idx[END_TAG]
@@ -52,11 +55,11 @@ def main():
 
     print("vocab_inp_size", vocab_inp_size)
     print("vocab_tar_size", vocab_tar_size)
-    
+
     model = Transformer(
         vocab_inp_size,
         vocab_tar_size,
-        MAX_TARGET_LEN).cuda()
+        MAX_TARGET_LEN).to(device)
 
     # baseline = Baseline(UNITS)
 
@@ -95,7 +98,7 @@ def main():
             src_seq = [env.lang.word2idx[token]
                        for token in tokenize_sentence(state)]
             src_seq, src_pos = collate_fn([src_seq])
-            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
+            src_seq, src_pos = src_seq.to(device), src_pos.to(device)
             enc_output, *_ = model.encoder(src_seq, src_pos)
             actions_t = []
             actions = []
@@ -108,7 +111,7 @@ def main():
                 else:
                     tgt_seq = actions_idx
                 tgt_seq, tgt_pos = collate_fn([tgt_seq])
-                tgt_seq, tgt_pos = tgt_seq.cuda(), tgt_pos.cuda()
+                tgt_seq, tgt_pos = tgt_seq.to(device), tgt_pos.to(device)
                 # dec_output dims: [1, pos, hidden]
                 dec_output, * \
                     _ = model.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
@@ -160,14 +163,15 @@ def main():
             l_optimizer.zero_grad()
             # accumulate gradient with GradientTape
             src_seq, src_pos = collate_fn(list(state_inp_b))
-            src_seq, src_pos = src_seq.cuda(), src_pos.cuda()
+            src_seq, src_pos = src_seq.to(device), src_pos.to(device)
             enc_output_b, *_ = model.encoder(src_seq, src_pos)
             max_sentence_len = action_inp_b.shape[1]
             tgt_seq = [[Constants.BOS] for i in range(BATCH_SIZE)]
             for t in range(max_sentence_len):
                 # _b stands for batch
                 prev_w_idx_b, tgt_pos = collate_fn(tgt_seq)
-                prev_w_idx_b, tgt_pos = prev_w_idx_b.cuda(), tgt_pos.cuda()
+                prev_w_idx_b, tgt_pos = prev_w_idx_b.to(
+                    device), tgt_pos.to(device)
                 # dec_output_b dims: [batch, pos, hidden]
                 dec_output_b, *_ = \
                     model.decoder(prev_w_idx_b, tgt_pos, src_seq, enc_output_b)
@@ -182,9 +186,9 @@ def main():
                 dist_b = torch.distributions.categorical.Categorical(
                     probs=w_probs_b)
                 curr_w_idx_b = action_inp_b[:, t]
-  
+
                 log_probs_b = torch.transpose(
-                    dist_b.log_prob(torch.transpose(curr_w_idx_b,0,1)),0,1
+                    dist_b.log_prob(torch.transpose(curr_w_idx_b, 0, 1)), 0, 1
                 )
 
                 # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
@@ -202,7 +206,8 @@ def main():
                 # loss_bl += -tf.math.multiply(delta_b, bl_val_b)
 
                 prev_w_idx_b = curr_w_idx_b
-                tgt_seq = np.append(tgt_seq, prev_w_idx_b.data.numpy(), axis=1).tolist()
+                tgt_seq = np.append(
+                    tgt_seq, prev_w_idx_b.data.numpy(), axis=1).tolist()
 
             # calculate cumulative gradients
 
@@ -236,5 +241,6 @@ def main():
             print("avg loss: ", np.mean(loss.numpy()))
             print("avg grad: ", np.mean(grads[1].numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
+
 
 main()
