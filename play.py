@@ -150,8 +150,8 @@ def main():
                 ]
                 for state, actions_b, _, reward in batch
             ])
-            action_inp_b = list(action_inp_b)
-            action_inp_b = torch.tensor(action_inp_b).to(device).unsqueeze(-1)
+            action_inp_b = [torch.stack(sent) for sent in action_inp_b]
+            action_inp_b = torch.stack(action_inp_b)
 
             ret_seq_b = np.asarray(ret_seq_b)
             ret_mean = np.mean(ret_seq_b)
