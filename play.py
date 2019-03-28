@@ -180,8 +180,7 @@ def main():
                 # w_logits_b dims: [batch, vocab_size]
                 w_logits_b = model.tgt_word_prj(dec_output_b)
                 # w_probs dims: [batch, vocab_size]
-                w_probs_b = torch.nn.functional.log_softmax(
-                    w_logits_b, dim=1)
+                w_probs_b = torch.nn.functional.softmax(w_logits_b, dim=1)
 
                 dist_b = torch.distributions.categorical.Categorical(
                     probs=w_probs_b)
