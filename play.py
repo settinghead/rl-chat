@@ -154,7 +154,7 @@ def main():
             action_inp_b = torch.tensor(action_inp_b).to(device).unsqueeze(-1)
 
             ret_mean = np.mean(ret_seq_b)
-            ret_std = np.std(ret_seq_b) + 0.01
+            ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
             ret_seq_b = torch.tensor(ret_seq_b).to(device)
 
@@ -225,7 +225,7 @@ def main():
             # Reset everything for the next episode
             history = history[BATCH_SIZE:]
 
-        if episode % max(BATCH_SIZE, 128) == 0 and batch != None:
+        if episode % max(BATCH_SIZE, 32) == 0 and batch != None:
             print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
             print("Episode # ", episode)
             print("Samples from episode with rewards > 0: ")
