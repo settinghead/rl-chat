@@ -65,7 +65,7 @@ def main():
 
     history = []
 
-    l_optimizer = torch.optim.Adam(model.parameters())
+    l_optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     batch = None
 
@@ -157,7 +157,7 @@ def main():
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             if ret_mean == 0:
-                ret_mean = 1
+                ret_mean = -1
             if ret_std == 0:
                 ret_std = 1
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
