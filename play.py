@@ -35,7 +35,7 @@ else:
     EMBEDDING_DIM = 8
 
 MAX_TARGET_LEN = 20  # TODO: hack
-#UNITS = 128
+# UNITS = 128
 
 
 def main():
@@ -124,7 +124,7 @@ def main():
                 w_dist = torch.distributions.categorical.Categorical(
                     probs=w_probs)
                 w_idx_t = w_dist.sample()
-                w_idx = w_idx_t.cpu().numpy()[0]
+                w_idx = w_idx_t[0].cpu().numpy()
                 actions_t.append(w_idx_t)
                 actions_idx.append(w_idx)
                 actions.append(env.lang.idx2word[w_idx])
@@ -235,13 +235,16 @@ def main():
                 print("actions: ", a)
                 print("reward: ", r)
                 # print("return: ", get_returns(r, MAX_TARGET_LEN))
+            ret_seq_b_np = ret_seq_b.cpu().numpy()
             print(
                 "all returns: min=%f, max=%f, median=%f" %
-                (np.min(ret_seq_b), np.max(ret_seq_b), np.median(ret_seq_b))
+                (np.min(ret_seq_b_np),
+                 np.max(ret_seq_b_np),
+                 np.median(ret_seq_b_np))
             )
             print("avg reward: ", sum(reward_b) / len(reward_b))
-            print("avg loss: ", np.mean(loss.numpy()))
-            print("avg grad: ", np.mean(grads[1].numpy()))
+            print("avg loss: ", np.mean(loss.cpu().numpy()))
+            # print("avg grad: ", np.mean(grads[1].detach().cpu().numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
 
