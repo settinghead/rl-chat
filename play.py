@@ -154,7 +154,7 @@ def main():
             action_inp_b = torch.tensor(action_inp_b).to(device).unsqueeze(-1)
 
             ret_mean = np.mean(ret_seq_b)
-            ret_std = np.std(ret_seq_b)
+            ret_std = np.std(ret_seq_b) + 0.01
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
             ret_seq_b = torch.tensor(ret_seq_b).to(device)
 
@@ -243,8 +243,8 @@ def main():
                  np.median(ret_seq_b_np))
             )
             print("avg reward: ", sum(reward_b) / len(reward_b))
-            print("avg loss: ", np.mean(loss.cpu().numpy()))
-            # print("avg grad: ", np.mean(grads[1].detach().cpu().numpy()))
+            print("avg loss: ", np.mean(loss.cpu().detach().numpy()))
+            # print("avg grad: ", np.mean(grads[1].cpu().detach().numpy()))
             # print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
 
