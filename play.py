@@ -65,7 +65,7 @@ def main():
 
     history = []
 
-    l_optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    l_optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     batch = None
 
@@ -154,14 +154,22 @@ def main():
             action_inp_b = torch.stack(action_inp_b)
 
             ret_seq_b = np.asarray(ret_seq_b)
+            # ret_mean = np.mean(ret_seq_b)
+            # ret_std = np.std(ret_seq_b)
+            # if ret_std == 0:
+            #     ret_std = 1
+            # if ret_mean == 0:
+            #     ret_seq_b = (ret_seq_b - 1) / ret_std
+            # else:
+            #     ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             if ret_std == 0:
-                ret_std = 1
-            if ret_mean == 0:
-                ret_seq_b = (ret_seq_b - 1) / ret_std
+                ret_seq_b = ret_seq_b - ret_mean
             else:
                 ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+
             ret_seq_b = torch.tensor(ret_seq_b, dtype=torch.float32).to(device)
 
             loss = 0
