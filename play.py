@@ -65,7 +65,7 @@ def main():
 
     history = []
 
-    l_optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    l_optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     batch = None
 
@@ -156,12 +156,13 @@ def main():
             ret_seq_b = np.asarray(ret_seq_b)
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
-            if ret_mean == 0:
-                ret_mean = -1
             if ret_std == 0:
                 ret_std = 1
-            ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-            ret_seq_b = torch.tensor(ret_seq_b).to(device)
+            if ret_mean == 0:
+                ret_seq_b = (ret_seq_b - 1) / ret_std
+            else:
+                ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            ret_seq_b = torch.tensor(ret_seq_b, dtype=torch.float32).to(device)
 
             loss = 0
             # loss_bl=0
@@ -205,7 +206,7 @@ def main():
                 ret_b = torch.reshape(
                     ret_seq_b[:, t], (BATCH_SIZE, 1)).to(device)
                 # alternatively, use torch.mul() but it is overloaded. Might need to try log_probs_b*vec.expand_as(A)
-                cost_b = - log_probs_b.double() * ret_b.double()
+                cost_b = - torch.mul(log_probs_b, ret_b)
                 #  log_probs_b*vec.expand_as(A)
                 # cost_b = -torch.bmm()   #if we are doing batch multiplication
 
