@@ -23,7 +23,7 @@ import tensorflow as tf
 
 USE_CUDA = True
 EPISODES = 10000000
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 # MODEL_BATCH_SIZE = 1
 GAMMA = 1  # TODO
 USE_GLOVE = False
@@ -35,7 +35,7 @@ else:
     EMBEDDING_DIM = 8
 
 MAX_TARGET_LEN = 20  # TODO: hack
-UNITS = 128
+#UNITS = 128
 
 
 def main():
@@ -151,12 +151,12 @@ def main():
                 for state, actions_b, _, reward in batch
             ])
             action_inp_b = list(action_inp_b)
-            action_inp_b = torch.tensor(action_inp_b).unsqueeze(-1)
+            action_inp_b = torch.tensor(action_inp_b).to(device).unsqueeze(-1)
 
             ret_mean = np.mean(ret_seq_b)
             ret_std = np.std(ret_seq_b)
             ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-            ret_seq_b = torch.tensor(ret_seq_b)
+            ret_seq_b = torch.tensor(ret_seq_b).to(device)
 
             loss = 0
             # loss_bl=0
@@ -187,7 +187,9 @@ def main():
                 curr_w_idx_b = action_inp_b[:, t]
 
                 log_probs_b = torch.transpose(
-                    dist_b.log_prob(torch.transpose(curr_w_idx_b, 0, 1)), 0, 1
+                    dist_b.log_prob(
+                        torch.transpose(curr_w_idx_b, 0, 1)
+                    ), 0, 1
                 )
 
                 # bl_val_b = baseline(tf.cast(dec_hidden_b, 'float32'))
@@ -195,7 +197,8 @@ def main():
 
                 # cost_b = -tf.math.multiply(log_probs_b, delta_b)
                 # cost_b = -tf.math.multiply(log_probs_b, ret_b)
-                ret_b = torch.reshape(ret_seq_b[:, t], (BATCH_SIZE, 1))
+                ret_b = torch.reshape(
+                    ret_seq_b[:, t], (BATCH_SIZE, 1)).to(device)
                 # alternatively, use torch.mul() but it is overloaded. Might need to try log_probs_b*vec.expand_as(A)
                 cost_b = - log_probs_b.double() * ret_b.double()
                 #  log_probs_b*vec.expand_as(A)
@@ -206,12 +209,12 @@ def main():
 
                 prev_w_idx_b = curr_w_idx_b
                 tgt_seq = np.append(
-                    tgt_seq, prev_w_idx_b.data.numpy(), axis=1).tolist()
+                    tgt_seq, prev_w_idx_b.data.cpu().numpy(), axis=1).tolist()
 
             # calculate cumulative gradients
 
             # model_vars = encoder.variables + decoder.variables
-            loss.backward()
+            loss.sum().backward()
             # loss_bl.backward()
 
             # finally, apply gradient
