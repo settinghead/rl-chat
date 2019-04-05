@@ -15,6 +15,7 @@ END_TAG = "◀"
 EMPTY_TOKEN = "◌"
 UNKNOWN_TOKEN = "♡"
 
+
 def char_tokenizer(s: str):
     return list(s)
 
@@ -28,6 +29,8 @@ class Environment:
     def __init__(self):
         self.reset()
         self._questions, _ = data.load_conv_text()
+        self._questions = [self._questions[0]]
+        # self._questions = ["I sliced off a little more for me."]
         self._lang = LanguageIndex(
             self._questions
         )
@@ -59,13 +62,15 @@ class Environment:
         self.history = []
 
     def calc_reward(self,
-        utterance1: str,
-        utterance2: str,
-        exclude_tokens = [Constants.EOS, Constants.PAD, Constants.BOS]):
+                    utterance1: str,
+                    utterance2: str,
+                    exclude_tokens=[Constants.EOS, Constants.PAD, Constants.BOS]):
         # calc string distance
-        token_seq1 = [self.lang.word2idx[t] for t in tokenize_sentence(utterance1)]
-        token_seq2 = [self.lang.word2idx[t] for t in tokenize_sentence(utterance2)]
-        seq1 = [t for t in token_seq1 if t not in exclude_tokens] 
+        token_seq1 = [self.lang.word2idx[t]
+                      for t in tokenize_sentence(utterance1)]
+        token_seq2 = [self.lang.word2idx[t]
+                      for t in tokenize_sentence(utterance2)]
+        seq1 = [t for t in token_seq1 if t not in exclude_tokens]
         seq2 = [t for t in token_seq2 if t not in exclude_tokens]
         r = SequenceMatcher(None, seq1, seq2).ratio()
         # if(r > 0):
