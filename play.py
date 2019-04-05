@@ -21,7 +21,7 @@ import tensorflow as tf
 # https://github.com/gabrielgarza/openai-gym-policy-gradient/blob/master/policy_gradient.py
 # https://github.com/yaserkl/RLSeq2Seq/blob/7e019e8e8c006f464fdc09e77169680425e83ad1/src/model.py#L348
 
-USE_CUDA = True
+USE_CUDA = torch.cuda.is_available()
 EPISODES = 10000000
 BATCH_SIZE = 32
 # MODEL_BATCH_SIZE = 1
