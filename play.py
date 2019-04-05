@@ -58,8 +58,11 @@ def main():
 
     model = Transformer(
         vocab_inp_size,
-        vocab_tar_size,
-        MAX_TARGET_LEN).to(device)
+        vocab_tar_size, MAX_TARGET_LEN,
+        d_word_vec=32, d_model=32, d_inner=32,
+        n_layers=3, n_head=4, d_k=32, d_v=32,
+        dropout=0.1,
+    ).to(device)
 
     # baseline = Baseline(UNITS)
 
@@ -89,6 +92,7 @@ def main():
 
         # Start of Episode
         env.reset()
+        model.eval()
 
         # get first state from the env
         state, _, done = env.step(SAY_HI)
@@ -124,7 +128,7 @@ def main():
                 w_dist = torch.distributions.categorical.Categorical(
                     probs=w_probs)
                 w_idx_t = w_dist.sample()
-                w_idx = w_idx_t[0].cpu().numpy()
+                w_idx = w_idx_t.cpu().numpy()[0]
                 actions_t.append(w_idx_t)
                 actions_idx.append(w_idx)
                 actions.append(env.lang.idx2word[w_idx])
@@ -139,6 +143,7 @@ def main():
             # record history (to be used for gradient updating after the episode is done)
         # End of Episode
         # Update policy
+        model.train()
         while len(history) >= BATCH_SIZE:
             batch = history[:BATCH_SIZE]
             state_inp_b, action_inp_b, reward_b, ret_seq_b = zip(*[
@@ -154,21 +159,11 @@ def main():
             action_inp_b = torch.stack(action_inp_b)
 
             ret_seq_b = np.asarray(ret_seq_b)
+
             # ret_mean = np.mean(ret_seq_b)
             # ret_std = np.std(ret_seq_b)
-            # if ret_std == 0:
-            #     ret_std = 1
-            # if ret_mean == 0:
-            #     ret_seq_b = (ret_seq_b - 1) / ret_std
-            # else:
-            #     ret_seq_b = (ret_seq_b - ret_mean) / ret_std
-
-            ret_mean = np.mean(ret_seq_b)
-            ret_std = np.std(ret_seq_b)
-            if ret_std == 0:
-                ret_seq_b = ret_seq_b - ret_mean
-            else:
-                ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            # ret_seq_b = (ret_seq_b - ret_mean) / ret_std
+            ret_seq_b = np.exp((ret_seq_b - 0.5) * 5)
 
             ret_seq_b = torch.tensor(ret_seq_b, dtype=torch.float32).to(device)
 
@@ -198,8 +193,7 @@ def main():
 
                 dist_b = torch.distributions.categorical.Categorical(
                     probs=w_probs_b)
-                curr_w_idx_b = action_inp_b[:, t]
-
+                curr_w_idx_b = action_inp_b[:, t, :]
                 log_probs_b = torch.transpose(
                     dist_b.log_prob(
                         torch.transpose(curr_w_idx_b, 0, 1)
